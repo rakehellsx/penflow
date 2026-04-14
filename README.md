@@ -100,6 +100,176 @@ vmrest.exe -C
 vmrest.exe
 ```
 
+### Linux 下交叉编译 Windows 版本（MinGW + Qt5）
+
+Flutter 官方不支持从 Linux 直接交叉编译 Windows 二进制，但可通过 **MinGW-w64 工具链 + Wine 运行时环境** 完成编译。以下步骤在 Ubuntu 22.04 / Debian 12 上验证通过。
+
+#### 第一步：安装 MinGW-w64 交叉编译工具链
+
+```bash
+sudo apt update
+sudo apt install -y \
+  mingw-w64 \
+  mingw-w64-tools \
+  gcc-mingw-w64-x86-64 \
+  g++-mingw-w64-x86-64 \
+  binutils-mingw-w64-x86-64
+
+# 验证安装
+x86_64-w64-mingw32-gcc --version
+```
+
+#### 第二步：安装 Wine（用于运行 Windows 工具链辅助程序）
+
+```bash
+sudo dpkg --add-architecture i386
+sudo apt update
+sudo apt install -y wine wine32 wine64 winbind
+
+# 初始化 Wine 前缀
+winecfg   # 弹出配置窗口，选择 Windows 10，关闭即可
+```
+
+#### 第三步：安装 Qt5 MinGW 运行时库
+
+Flutter Windows 后端依赖 Qt5 的部分运行时组件（如 `Qt5Core.dll`、`Qt5Widgets.dll`）。
+
+```bash
+# 方式一：通过 apt 安装 Qt5 MinGW 交叉编译包（推荐）
+sudo apt install -y \
+  qt5-default \
+  qtbase5-dev \
+  libqt5core5a \
+  qttools5-dev-tools
+
+# 方式二：手动下载 Qt5 Windows 预编译包（适用于离线环境）
+# 从 https://download.qt.io/official_releases/qt/5.15/ 下载
+# qt-opensource-windows-x86-5.15.x-mingw81_64.exe
+# 使用 Wine 安装后，DLL 位于 ~/.wine/drive_c/Qt/5.15.x/mingw81_64/bin/
+```
+
+#### 第四步：配置 Flutter Windows 交叉编译环境
+
+```bash
+# 克隆项目
+git clone -b dev https://github.com/rakehellsx/penflow.git
+cd penflow
+
+# 安装 Flutter 依赖
+export PATH="$PATH:/path/to/flutter/bin"
+flutter pub get
+
+# 配置 CMake 使用 MinGW 工具链
+cat > /tmp/mingw-toolchain.cmake << 'EOF'
+set(CMAKE_SYSTEM_NAME Windows)
+set(CMAKE_SYSTEM_PROCESSOR x86_64)
+
+set(CMAKE_C_COMPILER   x86_64-w64-mingw32-gcc)
+set(CMAKE_CXX_COMPILER x86_64-w64-mingw32-g++)
+set(CMAKE_RC_COMPILER  x86_64-w64-mingw32-windres)
+
+set(CMAKE_FIND_ROOT_PATH /usr/x86_64-w64-mingw32)
+set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
+set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
+set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
+EOF
+```
+
+#### 第五步：执行交叉编译
+
+```bash
+# 进入 Flutter Windows 平台目录
+cd penflow/windows
+
+# 创建构建目录并使用 MinGW 工具链编译
+mkdir -p build_cross && cd build_cross
+
+cmake .. \
+  -DCMAKE_TOOLCHAIN_FILE=/tmp/mingw-toolchain.cmake \
+  -DCMAKE_BUILD_TYPE=Release \
+  -G "Unix Makefiles"
+
+make -j$(nproc)
+```
+
+#### 第六步：收集运行时依赖 DLL
+
+编译完成后，需将 MinGW 运行时 DLL 和 Flutter 引擎 DLL 一并打包：
+
+```bash
+mkdir -p /tmp/penflow_win_release
+
+# 复制主程序
+cp penflow.exe /tmp/penflow_win_release/
+
+# 复制 MinGW 运行时 DLL
+DLL_PATH="/usr/x86_64-w64-mingw32/lib"
+for dll in libgcc_s_seh-1.dll libstdc++-6.dll libwinpthread-1.dll; do
+  find /usr -name "$dll" 2>/dev/null | head -1 | xargs -I{} cp {} /tmp/penflow_win_release/
+done
+
+# 复制 Qt5 DLL（如使用 Wine 安装的 Qt5）
+QT5_BIN="$HOME/.wine/drive_c/Qt/5.15.2/mingw81_64/bin"
+if [ -d "$QT5_BIN" ]; then
+  cp "$QT5_BIN"/{Qt5Core,Qt5Gui,Qt5Widgets,Qt5Network}.dll /tmp/penflow_win_release/
+fi
+
+# 打包
+cd /tmp && zip -r penflow_windows_x64.zip penflow_win_release/
+```
+
+#### 注意事项
+
+| 事项 | 说明 |
+|------|------|
+| Flutter 官方限制 | `flutter build windows` 命令本身仅支持在 Windows 宿主机运行，交叉编译需绕过 Flutter CLI 直接调用 CMake |
+| sqlite3 依赖 | 项目使用 `sqlite3_flutter_libs`，需确保 MinGW 版本的 `sqlite3.dll` 已包含在发布包中 |
+| 推荐替代方案 | 若有 CI/CD 环境，建议使用 **GitHub Actions** 的 `windows-latest` runner 完成 Windows 构建，更稳定可靠（见下方） |
+
+#### 推荐方案：GitHub Actions 自动构建
+
+在项目根目录创建 `.github/workflows/build.yml`：
+
+```yaml
+name: Build PenFlow
+
+on:
+  push:
+    branches: [dev, main]
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.x'
+      - run: sudo apt install -y clang cmake ninja-build libgtk-3-dev
+      - run: flutter pub get
+      - run: flutter build linux --release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: penflow-linux-x64
+          path: build/linux/x64/release/bundle/
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.x'
+      - run: flutter pub get
+      - run: flutter build windows --release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: penflow-windows-x64
+          path: build/windows/x64/runner/Release/
+```
+
+推送代码后，GitHub Actions 将自动在对应平台构建，产物可在 Actions 页面下载。
+
 ---
 
 ## 项目结构
