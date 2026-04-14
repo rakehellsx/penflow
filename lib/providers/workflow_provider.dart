@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 import '../models/tool_model.dart';
+import '../models/task_model.dart';
 import '../data/tools_data.dart';
+import '../services/task_service.dart';
 
 class WorkflowProvider extends ChangeNotifier {
   List<WorkflowNode> _nodes = [];
@@ -16,7 +18,16 @@ class WorkflowProvider extends ChangeNotifier {
   bool _isConnecting = false;
   String? _connectingFromNodeId;
 
+  // 当前激活任务 ID（用于 node_vm_binds 关联）
+  String? _activeTaskId;
+
+  // ── 动态工具注入（任务系统） ──
+  final Map<String, List<ToolDefinition>> _taskTools = {};
+  final Map<String, TaskCategory> _taskCategories = {};
+  final Map<String, List<TaskFileEntry>> _taskPayloads = {};
+
   final _uuid = const Uuid();
+  final _taskService = TaskService();
 
   List<WorkflowNode> get nodes => _nodes;
   List<WorkflowConnection> get connections => _connections;
@@ -27,9 +38,57 @@ class WorkflowProvider extends ChangeNotifier {
   String get targetDomain => _targetDomain;
   bool get isConnecting => _isConnecting;
   String? get connectingFromNodeId => _connectingFromNodeId;
+  String? get activeTaskId => _activeTaskId;
+
+  /// 所有工具（静态 kTools + 任务注入工具）
+  List<ToolDefinition> get allTools {
+    final extra = _taskTools.values.expand((l) => l).toList();
+    return [...kTools, ...extra];
+  }
+
+  /// 所有分类（静态 kCategories + 任务分类）
+  Map<String, ToolCategory> get allCategories {
+    final extra = <String, ToolCategory>{};
+    for (final entry in _taskCategories.entries) {
+      extra[entry.key] = entry.value.toToolCategory();
+    }
+    return {...kCategories, ...extra};
+  }
+
+  /// 获取任务载荷文件（供节点载荷选择器使用）
+  List<TaskFileEntry> get allTaskPayloads =>
+      _taskPayloads.values.expand((l) => l).toList();
 
   WorkflowNode? get selectedNode =>
       _selectedNodeId != null ? _nodes.where((n) => n.id == _selectedNodeId).firstOrNull : null;
+
+  // ── 任务工具注入 ──────────────────────────────────────────────────────────
+
+  void injectTaskTools({
+    required String taskId,
+    required String taskName,
+    required List<ToolDefinition> tools,
+    required List<TaskFileEntry> payloadFiles,
+  }) {
+    _taskTools[taskId] = tools;
+    _taskCategories[taskId] = TaskCategory(
+      id: 'task_$taskId',
+      label: '📋 $taskName',
+    );
+    _taskPayloads[taskId] = payloadFiles;
+    notifyListeners();
+  }
+
+  void clearTaskTools(String taskId) {
+    _taskTools.remove(taskId);
+    _taskCategories.remove(taskId);
+    _taskPayloads.remove(taskId);
+    notifyListeners();
+  }
+
+  void setActiveTask(String? taskId) {
+    _activeTaskId = taskId;
+  }
 
   // ── Node Operations ──
 
@@ -38,7 +97,7 @@ class WorkflowProvider extends ChangeNotifier {
     final node = WorkflowNode(id: id, toolId: toolId, x: x, y: y);
     _nodes.add(node);
     _selectedNodeId = id;
-    final tool = kTools.where((t) => t.id == toolId).firstOrNull;
+    final tool = allTools.where((t) => t.id == toolId).firstOrNull;
     addLog('info', '[${tool?.name ?? toolId}] 已添加到画布');
     notifyListeners();
     return id;
@@ -56,6 +115,8 @@ class WorkflowProvider extends ChangeNotifier {
     _nodes.removeWhere((n) => n.id == id);
     _connections.removeWhere((c) => c.fromNodeId == id || c.toNodeId == id);
     if (_selectedNodeId == id) _selectedNodeId = null;
+    // 删除节点时同步清除 VM 绑定
+    _taskService.removeNodeVmBind(id);
     addLog('warning', '节点已删除');
     notifyListeners();
   }
@@ -72,12 +133,46 @@ class WorkflowProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  void setNodeVm(String nodeId, String? vmId) {
+  /// 设置节点绑定的虚拟机，同时持久化到 SQLite
+  void setNodeVm(String nodeId, String? vmId, {
+    String vmName = '',
+    String vmIp = '',
+    String vmOsType = '',
+    String vmTag = '',
+    String vmBackend = '',
+  }) {
     final idx = _nodes.indexWhere((n) => n.id == nodeId);
     if (idx >= 0) {
       _nodes[idx] = _nodes[idx].copyWith(vmId: vmId);
+
+      // 持久化到 SQLite
+      if (vmId != null && vmId.isNotEmpty) {
+        _taskService.saveNodeVmBind(
+          nodeId: nodeId,
+          vmId: vmId,
+          vmName: vmName,
+          vmIp: vmIp,
+          vmOsType: vmOsType,
+          vmTag: vmTag,
+          vmBackend: vmBackend,
+          taskId: _activeTaskId,
+        );
+      } else {
+        _taskService.removeNodeVmBind(nodeId);
+      }
+
       notifyListeners();
     }
+  }
+
+  /// 查询节点绑定的 VM 详情（从 SQLite）
+  NodeVmBind? getNodeVmBind(String nodeId) {
+    return _taskService.getNodeVmBind(nodeId);
+  }
+
+  /// 查询所有节点VM绑定（用于工作流加载后恢复显示）
+  Map<String, NodeVmBind> getAllNodeVmBinds() {
+    return _taskService.getAllNodeVmBinds();
   }
 
   void setNodePayload(String nodeId, String? payload, String? payloadPath) {
@@ -189,7 +284,6 @@ class WorkflowProvider extends ChangeNotifier {
   void autoLayout() {
     if (_nodes.isEmpty) return;
 
-    // Simple auto layout: arrange nodes in a grid
     const colWidth = 280.0;
     const rowHeight = 180.0;
     const cols = 3;
@@ -294,6 +388,10 @@ class WorkflowProvider extends ChangeNotifier {
           .toList();
       _targetDomain = data['targetDomain'] ?? 'corp.local';
       _selectedNodeId = null;
+
+      // 从 SQLite 恢复节点VM绑定
+      await _restoreNodeVmBinds();
+
       addLog('success', '工作流已加载 (${_nodes.length} 节点, ${_connections.length} 连线)');
       notifyListeners();
     } catch (e) {
@@ -321,10 +419,28 @@ class WorkflowProvider extends ChangeNotifier {
           .toList();
       _targetDomain = data['targetDomain'] ?? 'corp.local';
       _selectedNodeId = null;
+
+      // 从 SQLite 恢复节点VM绑定
+      _restoreNodeVmBinds();
+
       addLog('success', '工作流已导入 (${_nodes.length} 节点, ${_connections.length} 连线)');
       notifyListeners();
     } catch (e) {
       addLog('error', '导入失败: $e');
     }
+  }
+
+  /// 从 SQLite 恢复节点VM绑定到内存节点
+  Future<void> _restoreNodeVmBinds() async {
+    try {
+      await _taskService.init();
+      final binds = _taskService.getAllNodeVmBinds();
+      for (int i = 0; i < _nodes.length; i++) {
+        final bind = binds[_nodes[i].id];
+        if (bind != null && (_nodes[i].vmId == null || _nodes[i].vmId!.isEmpty)) {
+          _nodes[i] = _nodes[i].copyWith(vmId: bind.vmId);
+        }
+      }
+    } catch (_) {}
   }
 }

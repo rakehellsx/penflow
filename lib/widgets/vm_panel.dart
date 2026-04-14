@@ -252,7 +252,14 @@ class _VmPanelState extends State<VmPanel>
             vm: vm,
             nodeId: widget.nodeId,
             onSelect: () {
-              context.read<WorkflowProvider>().setNodeVm(widget.nodeId, vm.id);
+              context.read<WorkflowProvider>().setNodeVm(
+                widget.nodeId, vm.id,
+                vmName: vm.name,
+                vmIp: vm.ip,
+                vmOsType: vm.osType,
+                vmTag: vm.tag,
+                vmBackend: 'preset',
+              );
               widget.onClose();
             },
           );
@@ -362,9 +369,14 @@ class _VmPanelState extends State<VmPanel>
             vm: vm,
             nodeId: widget.nodeId,
             onSelect: () {
-              context
-                  .read<WorkflowProvider>()
-                  .setNodeVm(widget.nodeId, vm.id);
+              context.read<WorkflowProvider>().setNodeVm(
+                widget.nodeId, vm.id,
+                vmName: vm.name,
+                vmIp: vm.ipAddress,
+                vmOsType: vm.osType,
+                vmTag: vm.name,
+                vmBackend: 'real',
+              );
               widget.onClose();
             },
           );
