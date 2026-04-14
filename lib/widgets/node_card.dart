@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/tool_model.dart';
@@ -215,8 +216,9 @@ class _NodeCardState extends State<NodeCard> {
       ),
     );
     if (result != null && context.mounted) {
-      final parts = result.split('/');
-      final fileName = parts.last;
+      // 兼容 Windows (\) 和 Linux (/) 路径分隔符
+      final sep = Platform.pathSeparator;
+      final fileName = result.split(sep).last;
       context.read<WorkflowProvider>()
           .setNodePayload(widget.node.id, fileName, result);
     }
@@ -554,7 +556,9 @@ class _OutPortState extends State<_OutPort> {
   }
 }
 
+
 // ── Payload Dialog ────────────────────────────
+// 对接本地真实文件系统，默认路径为桌面
 
 class _PayloadDialog extends StatefulWidget {
   final String nodeId;
@@ -566,8 +570,145 @@ class _PayloadDialog extends StatefulWidget {
 }
 
 class _PayloadDialogState extends State<_PayloadDialog> {
-  String _currentPath = '/pentest/exploits';
-  String? _selectedFile;
+  late String _currentPath;
+  String? _selectedFilePath;  // 完整路径
+  String? _selectedFileName;  // 文件名
+  List<FileSystemEntity> _dirs = [];
+  List<FileSystemEntity> _files = [];
+  bool _loading = false;
+  String? _error;
+  final TextEditingController _pathCtrl = TextEditingController();
+
+  // 快捷入口
+  late List<_QuickEntry> _quickEntries;
+
+  @override
+  void initState() {
+    super.initState();
+    _currentPath = _getDesktopPath();
+    _pathCtrl.text = _currentPath;
+    _loadDir(_currentPath);
+    _quickEntries = _buildQuickEntries();
+  }
+
+  @override
+  void dispose() {
+    _pathCtrl.dispose();
+    super.dispose();
+  }
+
+  /// 获取桌面路径（跨平台）
+  static String _getDesktopPath() {
+    if (Platform.isWindows) {
+      final userProfile = Platform.environment['USERPROFILE'] ?? 'C:\\Users\\User';
+      return '$userProfile\\Desktop';
+    } else {
+      final home = Platform.environment['HOME'] ?? '/root';
+      return '$home/Desktop';
+    }
+  }
+
+  /// 构建快捷入口列表
+  List<_QuickEntry> _buildQuickEntries() {
+    if (Platform.isWindows) {
+      final userProfile = Platform.environment['USERPROFILE'] ?? 'C:\\Users\\User';
+      return [
+        _QuickEntry('🖥', '桌面', '$userProfile\\Desktop'),
+        _QuickEntry('🏠', '主目录', userProfile),
+        _QuickEntry('📥', 'Downloads', '$userProfile\\Downloads'),
+        _QuickEntry('📄', 'Documents', '$userProfile\\Documents'),
+        _QuickEntry('💾', 'C:\\', 'C:\\'),
+      ];
+    } else {
+      final home = Platform.environment['HOME'] ?? '/root';
+      return [
+        _QuickEntry('🖥', '桌面', '$home/Desktop'),
+        _QuickEntry('🏠', '主目录', home),
+        _QuickEntry('📥', 'Downloads', '$home/Downloads'),
+        _QuickEntry('📄', 'Documents', '$home/Documents'),
+        _QuickEntry('💾', '根目录', '/'),
+        _QuickEntry('🔧', '/opt', '/opt'),
+        _QuickEntry('📦', '/tmp', '/tmp'),
+      ];
+    }
+  }
+
+  /// 加载目录内容
+  Future<void> _loadDir(String path) async {
+    setState(() { _loading = true; _error = null; });
+    try {
+      final dir = Directory(path);
+      if (!await dir.exists()) {
+        setState(() { _error = '目录不存在: $path'; _loading = false; });
+        return;
+      }
+      final entities = await dir.list(followLinks: false).toList();
+      entities.sort((a, b) {
+        final aIsDir = a is Directory;
+        final bIsDir = b is Directory;
+        if (aIsDir && !bIsDir) return -1;
+        if (!aIsDir && bIsDir) return 1;
+        return a.path.split(Platform.pathSeparator).last
+            .toLowerCase()
+            .compareTo(b.path.split(Platform.pathSeparator).last.toLowerCase());
+      });
+      setState(() {
+        _dirs = entities.whereType<Directory>().toList();
+        _files = entities.whereType<File>().toList();
+        _loading = false;
+        _selectedFilePath = null;
+        _selectedFileName = null;
+      });
+    } catch (e) {
+      setState(() { _error = '无法读取目录: $e'; _loading = false; });
+    }
+  }
+
+  void _navigateTo(String path) {
+    setState(() { _currentPath = path; });
+    _pathCtrl.text = path;
+    _loadDir(path);
+  }
+
+  void _navigateUp() {
+    final sep = Platform.pathSeparator;
+    final parts = _currentPath.split(sep);
+    if (parts.length <= 1) return;
+    parts.removeLast();
+    if (parts.isEmpty || (parts.length == 1 && parts[0].isEmpty)) {
+      _navigateTo('/');
+    } else {
+      _navigateTo(parts.join(sep));
+    }
+  }
+
+  String _basename(String path) =>
+      path.split(Platform.pathSeparator).last;
+
+  String _fileIcon(String name) {
+    final ext = name.contains('.') ? name.split('.').last.toLowerCase() : '';
+    switch (ext) {
+      case 'py': return '🐍';
+      case 'sh': return '📜';
+      case 'exe': case 'elf': return '⚙️';
+      case 'ps1': return '🔷';
+      case 'rb': return '💎';
+      case 'pl': return '🐪';
+      case 'jar': return '☕';
+      case 'zip': case 'tar': case 'gz': case '7z': return '📦';
+      case 'txt': case 'md': return '📄';
+      case 'json': case 'yaml': case 'yml': return '📋';
+      case 'pdf': return '📕';
+      case 'png': case 'jpg': case 'jpeg': case 'gif': return '🖼';
+      default: return '📄';
+    }
+  }
+
+  String _formatSize(int bytes) {
+    if (bytes < 1024) return '${bytes}B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)}KB';
+    return '${(bytes / 1024 / 1024).toStringAsFixed(1)}MB';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -576,29 +717,22 @@ class _PayloadDialogState extends State<_PayloadDialog> {
       backgroundColor: t.panel,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       child: SizedBox(
-        width: 680, height: 520,
+        width: 760, height: 560,
         child: Column(
           children: [
             _buildHeader(t),
+            _buildAddressBar(t),
             Expanded(
               child: Row(
                 children: [
+                  // 左侧快捷入口
                   SizedBox(
-                    width: 200,
-                    child: _FsTree(
-                      currentPath: _currentPath,
-                      onPathChange: (p) =>
-                          setState(() => _currentPath = p),
-                    ),
+                    width: 160,
+                    child: _buildQuickPanel(t),
                   ),
                   Container(width: 1, color: t.border),
-                  Expanded(
-                    child: _FsFiles(
-                      path: _currentPath,
-                      selectedFile: _selectedFile,
-                      onSelect: (f) => setState(() => _selectedFile = f),
-                    ),
-                  ),
+                  // 右侧文件列表
+                  Expanded(child: _buildFileList(t)),
                 ],
               ),
             ),
@@ -619,11 +753,9 @@ class _PayloadDialogState extends State<_PayloadDialog> {
         children: [
           const Text('📁', style: TextStyle(fontSize: 16)),
           const SizedBox(width: 8),
-          Text('平台文件系统',
+          Text('选择载荷文件',
               style: TextStyle(
-                  color: t.text,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600)),
+                  color: t.text, fontSize: 13, fontWeight: FontWeight.w600)),
           const Spacer(),
           IconButton(
             icon: Icon(Icons.close, color: t.text3, size: 16),
@@ -636,6 +768,191 @@ class _PayloadDialogState extends State<_PayloadDialog> {
     );
   }
 
+  Widget _buildAddressBar(AppThemeData t) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: t.border)),
+        color: t.bg,
+      ),
+      child: Row(
+        children: [
+          // 返回上级
+          _NavBtn(
+            icon: Icons.arrow_upward,
+            tooltip: '返回上级',
+            onTap: _navigateUp,
+            t: t,
+          ),
+          const SizedBox(width: 6),
+          // 刷新
+          _NavBtn(
+            icon: Icons.refresh,
+            tooltip: '刷新',
+            onTap: () => _loadDir(_currentPath),
+            t: t,
+          ),
+          const SizedBox(width: 8),
+          // 路径输入框
+          Expanded(
+            child: TextField(
+              controller: _pathCtrl,
+              style: TextStyle(color: t.text, fontSize: 11),
+              decoration: InputDecoration(
+                isDense: true,
+                contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 10, vertical: 6),
+                filled: true,
+                fillColor: t.card,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(4),
+                  borderSide: BorderSide(color: t.border),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(4),
+                  borderSide: BorderSide(color: AppAccent.blue),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(4),
+                  borderSide: BorderSide(color: t.border),
+                ),
+              ),
+              onSubmitted: (v) {
+                if (v.trim().isNotEmpty) _navigateTo(v.trim());
+              },
+            ),
+          ),
+          const SizedBox(width: 6),
+          // 跳转按钮
+          ElevatedButton(
+            onPressed: () {
+              final v = _pathCtrl.text.trim();
+              if (v.isNotEmpty) _navigateTo(v);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppAccent.blue,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              minimumSize: Size.zero,
+              textStyle: const TextStyle(fontSize: 11),
+            ),
+            child: const Text('跳转'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildQuickPanel(AppThemeData t) {
+    return Container(
+      color: t.bg,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(10, 8, 10, 4),
+            child: Text('快捷入口',
+                style: TextStyle(
+                    color: t.text3, fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.5)),
+          ),
+          ..._quickEntries.map((e) => _QuickEntryItem(
+            entry: e,
+            isActive: _currentPath == e.path,
+            onTap: () => _navigateTo(e.path),
+            t: t,
+          )),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFileList(AppThemeData t) {
+    if (_loading) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              width: 20, height: 20,
+              child: CircularProgressIndicator(
+                  strokeWidth: 2, color: AppAccent.blue),
+            ),
+            const SizedBox(height: 8),
+            Text('加载中...', style: TextStyle(color: t.text3, fontSize: 11)),
+          ],
+        ),
+      );
+    }
+    if (_error != null) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('⚠️', style: TextStyle(fontSize: 24)),
+            const SizedBox(height: 8),
+            Text(_error!,
+                style: TextStyle(color: AppAccent.red, fontSize: 11),
+                textAlign: TextAlign.center),
+            const SizedBox(height: 8),
+            TextButton(
+              onPressed: () => _navigateTo(_getDesktopPath()),
+              child: Text('返回桌面',
+                  style: TextStyle(color: AppAccent.blue, fontSize: 11)),
+            ),
+          ],
+        ),
+      );
+    }
+    if (_dirs.isEmpty && _files.isEmpty) {
+      return Center(
+        child: Text('该目录为空',
+            style: TextStyle(color: t.text3, fontSize: 11)),
+      );
+    }
+    return ListView(
+      padding: const EdgeInsets.all(8),
+      children: [
+        // 目录列表
+        ..._dirs.map((d) {
+          final name = _basename(d.path);
+          return _RealFsItem(
+            icon: '📁',
+            name: name,
+            subtitle: '目录',
+            isSelected: false,
+            isDir: true,
+            onTap: () => _navigateTo(d.path),
+            t: t,
+          );
+        }),
+        // 文件列表
+        ..._files.map((f) {
+          final name = _basename(f.path);
+          final file = f as File;
+          String size = '';
+          try {
+            size = _formatSize(file.lengthSync());
+          } catch (_) {}
+          final isSelected = _selectedFilePath == f.path;
+          return _RealFsItem(
+            icon: _fileIcon(name),
+            name: name,
+            subtitle: size,
+            isSelected: isSelected,
+            isDir: false,
+            onTap: () => setState(() {
+              _selectedFilePath = f.path;
+              _selectedFileName = name;
+            }),
+            t: t,
+          );
+        }),
+      ],
+    );
+  }
+
   Widget _buildFooter(BuildContext context, AppThemeData t) {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
@@ -644,11 +961,18 @@ class _PayloadDialogState extends State<_PayloadDialog> {
       ),
       child: Row(
         children: [
-          Text(
-            _selectedFile != null ? '已选择: $_selectedFile' : '未选择文件',
-            style: TextStyle(color: t.text2, fontSize: 11),
+          Expanded(
+            child: Text(
+              _selectedFileName != null
+                  ? '已选择: $_selectedFileName'
+                  : '未选择文件',
+              style: TextStyle(
+                  color: _selectedFileName != null ? t.text2 : t.text3,
+                  fontSize: 11),
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
-          const Spacer(),
+          const SizedBox(width: 12),
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: Text('取消',
@@ -656,9 +980,8 @@ class _PayloadDialogState extends State<_PayloadDialog> {
           ),
           const SizedBox(width: 8),
           ElevatedButton(
-            onPressed: _selectedFile != null
-                ? () => Navigator.pop(
-                    context, '$_currentPath/$_selectedFile')
+            onPressed: _selectedFilePath != null
+                ? () => Navigator.pop(context, _selectedFilePath)
                 : null,
             style: ElevatedButton.styleFrom(
               backgroundColor: AppAccent.blue,
@@ -675,72 +998,54 @@ class _PayloadDialogState extends State<_PayloadDialog> {
   }
 }
 
-class _FsTree extends StatelessWidget {
-  final String currentPath;
-  final Function(String) onPathChange;
-  const _FsTree({required this.currentPath, required this.onPathChange});
+// ── 快捷入口数据模型 ──────────────────────────
 
-  @override
-  Widget build(BuildContext context) {
-    final t = context.appTheme;
-    final items = <Widget>[];
-    for (final root in kFsTree['/'] ?? []) {
-      final rootPath = '/$root';
-      items.add(_FsTreeItem(
-        label: root, path: rootPath, icon: '📁',
-        isActive: currentPath.startsWith(rootPath), indent: 0,
-        onTap: () => onPathChange(rootPath),
-      ));
-      for (final sub in kFsTree[rootPath] ?? []) {
-        final subPath = '$rootPath/$sub';
-        items.add(_FsTreeItem(
-          label: sub, path: subPath, icon: '📂',
-          isActive: currentPath == subPath, indent: 1,
-          onTap: () => onPathChange(subPath),
-        ));
-      }
-    }
-    return Container(color: t.bg, child: ListView(children: items));
-  }
+class _QuickEntry {
+  final String icon;
+  final String label;
+  final String path;
+  const _QuickEntry(this.icon, this.label, this.path);
 }
 
-class _FsTreeItem extends StatefulWidget {
-  final String label, path, icon;
+// ── 快捷入口列表项 ────────────────────────────
+
+class _QuickEntryItem extends StatefulWidget {
+  final _QuickEntry entry;
   final bool isActive;
-  final int indent;
   final VoidCallback onTap;
-  const _FsTreeItem({
-    required this.label, required this.path, required this.icon,
-    required this.isActive, required this.indent, required this.onTap,
+  final AppThemeData t;
+  const _QuickEntryItem({
+    required this.entry, required this.isActive,
+    required this.onTap, required this.t,
   });
 
   @override
-  State<_FsTreeItem> createState() => _FsTreeItemState();
+  State<_QuickEntryItem> createState() => _QuickEntryItemState();
 }
 
-class _FsTreeItemState extends State<_FsTreeItem> {
+class _QuickEntryItemState extends State<_QuickEntryItem> {
   bool _hovered = false;
 
   @override
   Widget build(BuildContext context) {
-    final t = context.appTheme;
+    final t = widget.t;
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
       onExit:  (_) => setState(() => _hovered = false),
       child: GestureDetector(
         onTap: widget.onTap,
         child: Container(
-          padding: EdgeInsets.fromLTRB(
-              8.0 + widget.indent * 16, 6, 8, 6),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           color: widget.isActive
               ? AppAccent.blue.withOpacity(0.15)
               : (_hovered ? t.card : Colors.transparent),
           child: Row(
             children: [
-              Text(widget.icon, style: const TextStyle(fontSize: 12)),
-              const SizedBox(width: 6),
+              Text(widget.entry.icon,
+                  style: const TextStyle(fontSize: 13)),
+              const SizedBox(width: 8),
               Expanded(
-                child: Text(widget.label,
+                child: Text(widget.entry.label,
                     style: TextStyle(
                       color: widget.isActive ? AppAccent.blue : t.text2,
                       fontSize: 11,
@@ -755,69 +1060,53 @@ class _FsTreeItemState extends State<_FsTreeItem> {
   }
 }
 
-class _FsFiles extends StatelessWidget {
-  final String path;
-  final String? selectedFile;
-  final Function(String) onSelect;
-  const _FsFiles(
-      {required this.path, this.selectedFile, required this.onSelect});
+// ── 真实文件系统列表项 ────────────────────────
 
-  @override
-  Widget build(BuildContext context) {
-    final t = context.appTheme;
-    final files = kFsFiles[path] ?? [];
-    if (files.isEmpty) {
-      return Center(
-        child: Text('该目录为空',
-            style: TextStyle(color: t.text3, fontSize: 11)),
-      );
-    }
-    return ListView.builder(
-      padding: const EdgeInsets.all(8),
-      itemCount: files.length,
-      itemBuilder: (context, index) {
-        final file = files[index];
-        return _FsFileItem(
-          file: file,
-          isSelected: selectedFile == file.name,
-          onTap: () => onSelect(file.name),
-        );
-      },
-    );
-  }
-}
-
-class _FsFileItem extends StatefulWidget {
-  final PlatformFile file;
+class _RealFsItem extends StatefulWidget {
+  final String icon;
+  final String name;
+  final String subtitle;
   final bool isSelected;
+  final bool isDir;
   final VoidCallback onTap;
-  const _FsFileItem(
-      {required this.file, required this.isSelected, required this.onTap});
+  final AppThemeData t;
+  const _RealFsItem({
+    required this.icon, required this.name, required this.subtitle,
+    required this.isSelected, required this.isDir,
+    required this.onTap, required this.t,
+  });
 
   @override
-  State<_FsFileItem> createState() => _FsFileItemState();
+  State<_RealFsItem> createState() => _RealFsItemState();
 }
 
-class _FsFileItemState extends State<_FsFileItem> {
+class _RealFsItemState extends State<_RealFsItem> {
   bool _hovered = false;
 
   @override
   Widget build(BuildContext context) {
-    final t = context.appTheme;
+    final t = widget.t;
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
       onExit:  (_) => setState(() => _hovered = false),
+      cursor: widget.isDir
+          ? SystemMouseCursors.click
+          : SystemMouseCursors.basic,
       child: GestureDetector(
         onTap: widget.onTap,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 100),
           margin: const EdgeInsets.only(bottom: 2),
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(4),
             color: widget.isSelected
                 ? AppAccent.blue.withOpacity(0.15)
-                : (_hovered ? t.card : Colors.transparent),
+                : (_hovered
+                    ? (widget.isDir
+                        ? AppAccent.blue.withOpacity(0.08)
+                        : t.card)
+                    : Colors.transparent),
             border: Border.all(
               color: widget.isSelected
                   ? AppAccent.blue.withOpacity(0.4)
@@ -826,30 +1115,85 @@ class _FsFileItemState extends State<_FsFileItem> {
           ),
           child: Row(
             children: [
-              Text(widget.file.icon,
-                  style: const TextStyle(fontSize: 16)),
+              Text(widget.icon,
+                  style: const TextStyle(fontSize: 15)),
               const SizedBox(width: 10),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(widget.file.name,
+                    Text(widget.name,
                         style: TextStyle(
                           color: widget.isSelected
                               ? AppAccent.blue
-                              : t.text,
+                              : (widget.isDir ? t.text : t.text),
                           fontSize: 11,
-                        )),
-                    Text(
-                        '${widget.file.date} · ${widget.file.type.toUpperCase()}',
-                        style:
-                            TextStyle(color: t.text3, fontSize: 10)),
+                          fontWeight: widget.isDir
+                              ? FontWeight.w500
+                              : FontWeight.normal,
+                        ),
+                        overflow: TextOverflow.ellipsis),
+                    if (widget.subtitle.isNotEmpty)
+                      Text(widget.subtitle,
+                          style: TextStyle(
+                              color: t.text3, fontSize: 10)),
                   ],
                 ),
               ),
-              Text(widget.file.size,
-                  style: TextStyle(color: t.text3, fontSize: 10)),
+              if (widget.isDir)
+                Icon(Icons.chevron_right,
+                    color: t.text3, size: 14),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── 导航按钮 ──────────────────────────────────
+
+class _NavBtn extends StatefulWidget {
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onTap;
+  final AppThemeData t;
+  const _NavBtn({
+    required this.icon, required this.tooltip,
+    required this.onTap, required this.t,
+  });
+
+  @override
+  State<_NavBtn> createState() => _NavBtnState();
+}
+
+class _NavBtnState extends State<_NavBtn> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = widget.t;
+    return Tooltip(
+      message: widget.tooltip,
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _hovered = true),
+        onExit:  (_) => setState(() => _hovered = false),
+        child: GestureDetector(
+          onTap: widget.onTap,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 120),
+            width: 26, height: 26,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(4),
+              color: _hovered
+                  ? AppAccent.blue.withOpacity(0.15)
+                  : Colors.transparent,
+              border: Border.all(
+                  color: _hovered ? AppAccent.blue : t.border),
+            ),
+            child: Icon(widget.icon,
+                color: _hovered ? AppAccent.blue : t.text3,
+                size: 14),
           ),
         ),
       ),
