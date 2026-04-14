@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/tool_model.dart';
 import '../providers/workflow_provider.dart';
-import '../data/tools_data.dart';
+import '../providers/tool_provider.dart';
+import '../data/tools_data.dart' show kVirtualMachines;
 import '../utils/app_theme.dart';
 
 class RightPanel extends StatelessWidget {
@@ -130,9 +131,10 @@ class _DocsTab extends StatelessWidget {
       builder: (context, provider, _) {
         final node = provider.selectedNode;
         if (node == null) return const _DocsPlaceholder();
-        final tool = kTools.where((t) => t.id == node.toolId).firstOrNull;
+        final toolProvider = context.read<ToolProvider>();
+        final tool = toolProvider.getToolById(node.toolId);
         if (tool == null) return const _DocsPlaceholder();
-        final cat = kCategories[tool.catId];
+        final cat = toolProvider.getCategoryById(tool.catId);
 
         return Column(
           children: [
@@ -535,6 +537,7 @@ class _ReportTab extends StatefulWidget {
 class _ReportTabState extends State<_ReportTab> {
   final _domainController =
       TextEditingController(text: 'corp.local');
+  ToolProvider? _cachedToolProvider;
 
   @override
   void dispose() {
@@ -547,6 +550,7 @@ class _ReportTabState extends State<_ReportTab> {
     final t = context.appTheme;
     return Consumer<WorkflowProvider>(
       builder: (context, provider, _) {
+        _cachedToolProvider = context.read<ToolProvider>();
         final nodeCount = provider.nodes.length;
         final connCount = provider.connections.length;
 
@@ -687,32 +691,19 @@ class _ReportTabState extends State<_ReportTab> {
                 ),
                 child: Column(
                   children: [
-                    _InfoRow(
-                        label: '当前节点',
-                        value: provider.selectedNode != null
-                            ? (kTools
-                                    .where((t) =>
-                                        t.id ==
-                                        provider
-                                            .selectedNode!.toolId)
-                                    .firstOrNull
-                                    ?.name ??
-                                '—')
-                            : '—'),
-                    _InfoRow(
-                        label: '阶段',
-                        value: provider.selectedNode != null
-                            ? (kCategories[kTools
-                                        .where((t) =>
-                                            t.id ==
-                                            provider.selectedNode!
-                                                .toolId)
-                                        .firstOrNull
-                                        ?.catId ??
-                                    '']
-                                    ?.label ??
-                                '—')
-                            : '—'),
+                    Builder(builder: (ctx) {
+                      final tp = ctx.read<ToolProvider>();
+                      final selTool = provider.selectedNode != null
+                          ? tp.getToolById(provider.selectedNode!.toolId)
+                          : null;
+                      final selCat = selTool != null
+                          ? tp.getCategoryById(selTool.catId)
+                          : null;
+                      return Column(children: [
+                        _InfoRow(label: '当前节点', value: selTool?.name ?? '—'),
+                        _InfoRow(label: '阶段', value: selCat?.label ?? '—'),
+                      ]);
+                    }),
                     _InfoRow(
                         label: '目标域',
                         value: provider.targetDomain),
@@ -781,11 +772,11 @@ class _ReportTabState extends State<_ReportTab> {
     sb.writeln('');
     sb.writeln('## 2. 工具使用情况');
     sb.writeln('');
+    // NOTE: _buildReportContent is called outside widget tree, use cached tools
     for (final node in provider.nodes) {
-      final tool =
-          kTools.where((t) => t.id == node.toolId).firstOrNull;
+      final tool = _cachedToolProvider?.getToolById(node.toolId);
       if (tool != null) {
-        final cat = kCategories[tool.catId];
+        final cat = _cachedToolProvider?.getCategoryById(tool.catId);
         sb.writeln(
             '- **${tool.name}** [${cat?.label ?? ''}] - 风险等级: ${_riskLabel(tool.risk)}');
         if (node.vmId != null) {
@@ -812,14 +803,10 @@ class _ReportTabState extends State<_ReportTab> {
           .where((n) => n.id == conn.toNodeId)
           .firstOrNull;
       final fromTool = fromNode != null
-          ? kTools
-              .where((t) => t.id == fromNode.toolId)
-              .firstOrNull
+          ? _cachedToolProvider?.getToolById(fromNode.toolId)
           : null;
       final toTool = toNode != null
-          ? kTools
-              .where((t) => t.id == toNode.toolId)
-              .firstOrNull
+          ? _cachedToolProvider?.getToolById(toNode.toolId)
           : null;
       if (fromTool != null && toTool != null) {
         sb.writeln('- ${fromTool.name} → ${toTool.name}');

@@ -364,6 +364,16 @@ class TaskService {
     return result;
   }
 
+  /// 读取文件字节（辅助方法）
+  Future<List<int>> readFileBytes(String path) async {
+    return File(path).readAsBytes();
+  }
+
+  /// 读取文件文本（辅助方法）
+  Future<String> readFileText(String path) async {
+    return File(path).readAsString();
+  }
+
   void dispose() {
     _db?.dispose();
     _db = null;

@@ -2,7 +2,8 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/tool_model.dart';
-import '../data/tools_data.dart';
+import '../providers/tool_provider.dart';
+import '../data/tools_data.dart' show kVirtualMachines;
 import '../providers/workflow_provider.dart';
 import '../utils/app_theme.dart';
 
@@ -41,19 +42,27 @@ class NodeCard extends StatefulWidget {
 class _NodeCardState extends State<NodeCard> {
   bool _hovered = false;
 
-  ToolDefinition? get _tool =>
-      kTools.where((t) => t.id == widget.node.toolId).firstOrNull;
-  ToolCategory? get _cat =>
-      _tool != null ? kCategories[_tool!.catId] : null;
-  VirtualMachine? get _vm =>
-      widget.node.vmId != null
-          ? kVirtualMachines.where((v) => v.id == widget.node.vmId).firstOrNull
-          : null;
+  ToolDefinition? _resolveTool(BuildContext context) {
+    final tp = context.read<ToolProvider>();
+    return tp.getToolById(widget.node.toolId);
+  }
+
+  ToolCategory? _resolveCat(BuildContext context, ToolDefinition? tool) {
+    if (tool == null) return null;
+    return context.read<ToolProvider>().getCategoryById(tool.catId);
+  }
+
+  VirtualMachine? _resolveVm(BuildContext context) {
+    if (widget.node.vmId == null) return null;
+    // 先从静态预设 VM 列表查找
+    final preset = kVirtualMachines.where((v) => v.id == widget.node.vmId).firstOrNull;
+    return preset;
+  }
 
   @override
   Widget build(BuildContext context) {
-    final tool = _tool;
-    final cat  = _cat;
+    final tool = _resolveTool(context);
+    final cat  = _resolveCat(context, tool);
     if (tool == null || cat == null) return const SizedBox.shrink();
     final t = context.appTheme;
 
@@ -169,7 +178,7 @@ class _NodeCardState extends State<NodeCard> {
       padding: const EdgeInsets.all(9),
       child: Column(
         children: [
-          _VmSelector(vm: _vm, onTap: widget.onOpenVMPanel),
+          _VmSelector(vm: _resolveVm(context), onTap: widget.onOpenVMPanel),
           const SizedBox(height: 6),
           _PayloadSelector(
             payload: widget.node.payload,

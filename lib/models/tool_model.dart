@@ -51,6 +51,7 @@ class ToolDefinition {
   final String version;
   final String platform;
   final RiskLevel risk;
+  final bool isBuiltin;
 
   const ToolDefinition({
     required this.id,
@@ -63,6 +64,7 @@ class ToolDefinition {
     required this.version,
     required this.platform,
     required this.risk,
+    this.isBuiltin = true,
   });
 }
 
@@ -242,4 +244,19 @@ class LogEntry {
       default: return AppColors.text2;
     }
   }
+}
+
+/// 任务动态分类（用于 WorkflowProvider 注入）
+class TaskCategory {
+  final String id;
+  final String label;
+
+  const TaskCategory({required this.id, required this.label});
+
+  ToolCategory toToolCategory() => ToolCategory(
+    id: id,
+    label: label,
+    icon: '📋',
+    color: const Color(0xFF6C8EBF),
+  );
 }

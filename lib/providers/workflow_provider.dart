@@ -229,9 +229,9 @@ class WorkflowProvider extends ChangeNotifier {
 
     final fromNode = _nodes.where((n) => n.id == fromNodeId).firstOrNull;
     final toNode = _nodes.where((n) => n.id == toNodeId).firstOrNull;
-    final fromTool = fromNode != null ? kTools.where((t) => t.id == fromNode.toolId).firstOrNull : null;
-    final toTool = toNode != null ? kTools.where((t) => t.id == toNode.toolId).firstOrNull : null;
-    addLog('success', '连线: [${fromTool?.name ?? fromNodeId}] → [${toTool?.name ?? toNodeId}]');
+    final fromLabel = fromNode?.toolId ?? fromNodeId;
+    final toLabel = toNode?.toolId ?? toNodeId;
+    addLog('success', '连线: [$fromLabel] → [$toLabel]');
     notifyListeners();
     return true;
   }
