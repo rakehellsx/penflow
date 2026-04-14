@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'providers/workflow_provider.dart';
+import 'providers/vm_manager_provider.dart';
 import 'providers/auth_provider.dart';
 import 'screens/main_screen.dart';
 import 'screens/login_screen.dart';
@@ -42,6 +43,7 @@ class _PenFlowAppState extends State<PenFlowApp> {
         ChangeNotifierProvider.value(value: _themeProvider),
         ChangeNotifierProvider.value(value: _authProvider),
         ChangeNotifierProvider(create: (_) => WorkflowProvider()),
+        ChangeNotifierProvider(create: (_) => VmManagerProvider()),
       ],
       child: AppThemeScope(
         provider: _themeProvider,
