@@ -1,9 +1,13 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../providers/workflow_provider.dart';
+import '../providers/vm_manager_provider.dart';
 import '../models/tool_model.dart';
+import '../data/tools_data.dart';
+import '../services/vm_backend.dart';
 import '../utils/app_theme.dart';
 import 'node_card.dart';
 import 'connection_painter.dart';
@@ -201,6 +205,213 @@ class _CanvasAreaState extends State<CanvasArea> {
     );
   }
 
+  // ── 进入虚拟机处理逻辑 ──────────────────────────────────────────────────────
+  Future<void> _handleEnterVm(
+    BuildContext context,
+    WorkflowNode node,
+    WorkflowProvider provider,
+  ) async {
+    // 1. 未选择 VM → 打开 VM 选择面板
+    if (node.vmId == null) {
+      widget.onOpenVMPanel(node.id);
+      return;
+    }
+
+    final vmId = node.vmId!;
+
+    // 2. 先尝试从真实后端 VM 列表中查找
+    final vmManager = context.read<VmManagerProvider>();
+    VmInfo? realVm;
+    if (vmManager.available) {
+      try {
+        realVm = vmManager.vms.where((v) => v.id == vmId).firstOrNull;
+      } catch (_) {}
+    }
+
+    // 3. 如果找到真实 VM，调用 openConsole
+    if (realVm != null) {
+      _showConsoleLoading(context);
+      final result = await vmManager.openConsole(
+        realVm.id,
+        vmName: realVm.name,
+      );
+      if (context.mounted) {
+        Navigator.of(context).pop(); // 关闭 loading
+        _showConsoleResult(context, result);
+      }
+      return;
+    }
+
+    // 4. 从预设列表查找（静态 VM）
+    final staticVm = kVirtualMachines.where((v) => v.id == vmId).firstOrNull;
+    if (staticVm != null) {
+      // 预设 VM 没有真实后端，显示提示对话框
+      if (context.mounted) {
+        _showStaticVmDialog(context, staticVm.name, staticVm.ip);
+      }
+      return;
+    }
+
+    // 5. VM ID 无法解析
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('无法找到对应的虚拟机，请重新选择'),
+          backgroundColor: AppAccent.red,
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.all(16),
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    }
+  }
+
+  void _showConsoleLoading(BuildContext context) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const _ConsoleLoadingDialog(),
+    );
+  }
+
+  void _showConsoleResult(BuildContext context, ConsoleResult result) {
+    final t = context.appTheme;
+    if (result.success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Text('🖥  ', style: TextStyle(fontSize: 14)),
+              Expanded(
+                child: Text(
+                  result.message,
+                  style: const TextStyle(fontSize: 11),
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: AppAccent.green,
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.all(16),
+          duration: const Duration(seconds: 4),
+        ),
+      );
+    } else {
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: t.panel,
+          title: Row(
+            children: [
+              const Text('⚠️  ', style: TextStyle(fontSize: 16)),
+              Text('无法打开控制台',
+                  style: TextStyle(
+                      color: t.text, fontSize: 13, fontWeight: FontWeight.w600)),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(result.message,
+                  style: TextStyle(color: t.text2, fontSize: 11)),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: t.bg,
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: t.border),
+                ),
+                child: Text(
+                  _getInstallHint(result.method),
+                  style: TextStyle(
+                      color: AppAccent.cyan, fontSize: 10, fontFamily: 'Consolas'),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('确定'),
+            ),
+          ],
+        ),
+      );
+    }
+  }
+
+  void _showStaticVmDialog(BuildContext context, String vmName, String vmIp) {
+    final t = context.appTheme;
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: t.panel,
+        title: Row(
+          children: [
+            const Text('🖥  ', style: TextStyle(fontSize: 16)),
+            Text('预设虚拟机',
+                style: TextStyle(
+                    color: t.text, fontSize: 13, fontWeight: FontWeight.w600)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('当前节点绑定的是预设虚拟机，无法直接连接控制台。',
+                style: TextStyle(color: t.text2, fontSize: 11)),
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: t.bg,
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: t.border),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('名称: $vmName',
+                      style: TextStyle(
+                          color: t.text2, fontSize: 10, fontFamily: 'Consolas')),
+                  Text('IP: $vmIp',
+                      style: TextStyle(
+                          color: AppAccent.cyan,
+                          fontSize: 10,
+                          fontFamily: 'Consolas')),
+                ],
+              ),
+            ),
+            const SizedBox(height: 10),
+            Text('请在 VM 面板切换到「真实虚拟机」Tab 并选择对应的 VM，即可使用控制台功能。',
+                style: TextStyle(color: t.text3, fontSize: 10)),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('知道了'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _getInstallHint(ConsoleMethod method) {
+    switch (method) {
+      case ConsoleMethod.notAvailable:
+        if (Platform.isLinux) {
+          return 'sudo apt install virt-viewer\n# 或\nsudo apt install remote-viewer';
+        } else {
+          return '请确认 VMware Workstation 已安装\n并运行 vmrest.exe 启动 REST API';
+        }
+      default:
+        return '请检查虚拟机管理服务是否正常运行';
+    }
+  }
+
   Widget _buildNode(BuildContext context, WorkflowNode node, WorkflowProvider provider) {
     final screenX = node.x * provider.scale + provider.offset.dx;
     final screenY = node.y * provider.scale + provider.offset.dy;
@@ -244,9 +455,7 @@ class _CanvasAreaState extends State<CanvasArea> {
               });
             }
           },
-          onEnterVM: () {
-            widget.onOpenVMPanel(node.id);
-          },
+          onEnterVM: () => _handleEnterVm(context, node, provider),
         ),
       ),
     );
@@ -302,7 +511,7 @@ class _EmptyState extends StatelessWidget {
               const SizedBox(height: 12),
               Text('从左侧工具箱拖拽工具到此处', style: TextStyle(color: t.text3, fontSize: 13)),
               const SizedBox(height: 4),
-              Text('或点击「加载攻击链」快速开始', style: TextStyle(color: t.text3, fontSize: 11)),
+              Text('或点击顶部「加载」导入已有工作流', style: TextStyle(color: t.text3, fontSize: 11)),
             ],
           );
         }),
@@ -351,6 +560,54 @@ class _CanvasButtonState extends State<_CanvasButton> {
           ),
         );
       }),
+    );
+  }
+}
+
+// ── 控制台连接加载对话框 ─────────────────────────────────────────────────────
+
+class _ConsoleLoadingDialog extends StatelessWidget {
+  const _ConsoleLoadingDialog();
+
+  @override
+  Widget build(BuildContext context) {
+    final t = context.appTheme;
+    return Dialog(
+      backgroundColor: t.panel,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(10),
+        side: BorderSide(color: t.border),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 28),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(
+              width: 36,
+              height: 36,
+              child: CircularProgressIndicator(
+                strokeWidth: 3,
+                color: AppAccent.blue,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              '正在连接虚拟机控制台...',
+              style: TextStyle(
+                color: t.text,
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              '正在启动图形化控制台，请稍候',
+              style: TextStyle(color: t.text3, fontSize: 10),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

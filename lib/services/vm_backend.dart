@@ -89,7 +89,36 @@ abstract class VmBackend {
   /// 获取单个 VM 状态
   Future<VmPowerState> getPowerState(String vmId);
 
+  /// 打开虚拟机控制台/GUI 界面
+  /// 返回 [ConsoleResult]，包含是否成功和错误信息
+  Future<ConsoleResult> openConsole(String vmId, {String? vmName});
+
   String get backendName;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 控制台连接结果
+// ─────────────────────────────────────────────────────────────────────────────
+
+class ConsoleResult {
+  final bool success;
+  final String message;
+  final ConsoleMethod method;
+
+  const ConsoleResult({
+    required this.success,
+    required this.message,
+    required this.method,
+  });
+}
+
+enum ConsoleMethod {
+  vmwareGui,      // VMware Workstation GUI 窗口
+  vmwareVnc,      // VMware VNC 连接
+  virtViewer,     // virt-viewer (SPICE/VNC)
+  virshConsole,   // virsh console (串行终端)
+  remoteViewer,   // remote-viewer
+  notAvailable,   // 后端不可用
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -284,6 +313,85 @@ class VmwareWorkstationBackend extends VmBackend {
   Future<bool> delete(String vmId) async {
     final resp = await _request('DELETE', '/vms/$vmId');
     return resp != null && (resp.statusCode == 200 || resp.statusCode == 204);
+  }
+
+  @override
+  Future<ConsoleResult> openConsole(String vmId, {String? vmName}) async {
+    // VMware Workstation 控制台连接策略：
+    // 1. 优先使用 vmrun gui 打开 VMware GUI 窗口（需要 .vmx 路径）
+    // 2. 降级：通过 vmplayer 打开
+    // 3. 降级：通过 vmware.exe 打开
+    // vmId 在 VMware 后端就是 .vmx 文件路径
+
+    final vmxPath = vmId; // VMware 后端的 vmId 就是 vmx 路径
+
+    // 候选 vmrun 路径
+    final vmrunCandidates = [
+      r'C:\Program Files (x86)\VMware\VMware Workstation\vmrun.exe',
+      r'C:\Program Files\VMware\VMware Workstation\vmrun.exe',
+    ];
+
+    for (final vmrunPath in vmrunCandidates) {
+      if (await File(vmrunPath).exists()) {
+        try {
+          // vmrun gui <vmx> 打开 GUI 窗口
+          final result = await Process.run(
+            vmrunPath,
+            ['gui', vmxPath],
+            runInShell: false,
+          );
+          if (result.exitCode == 0) {
+            return ConsoleResult(
+              success: true,
+              message: '已通过 VMware Workstation 打开虚拟机控制台',
+              method: ConsoleMethod.vmwareGui,
+            );
+          }
+        } catch (_) {}
+      }
+    }
+
+    // 降级：使用 vmplayer.exe 打开 .vmx
+    final vmplayerCandidates = [
+      r'C:\Program Files (x86)\VMware\VMware Player\vmplayer.exe',
+      r'C:\Program Files\VMware\VMware Player\vmplayer.exe',
+    ];
+    for (final playerPath in vmplayerCandidates) {
+      if (await File(playerPath).exists()) {
+        try {
+          await Process.start(playerPath, [vmxPath], mode: ProcessStartMode.detached);
+          return ConsoleResult(
+            success: true,
+            message: '已通过 VMware Player 打开虚拟机',
+            method: ConsoleMethod.vmwareGui,
+          );
+        } catch (_) {}
+      }
+    }
+
+    // 降级：使用 vmware.exe 打开
+    final vmwareCandidates = [
+      r'C:\Program Files (x86)\VMware\VMware Workstation\vmware.exe',
+      r'C:\Program Files\VMware\VMware Workstation\vmware.exe',
+    ];
+    for (final vmwarePath in vmwareCandidates) {
+      if (await File(vmwarePath).exists()) {
+        try {
+          await Process.start(vmwarePath, [vmxPath], mode: ProcessStartMode.detached);
+          return ConsoleResult(
+            success: true,
+            message: '已通过 VMware Workstation 打开虚拟机',
+            method: ConsoleMethod.vmwareGui,
+          );
+        } catch (_) {}
+      }
+    }
+
+    return ConsoleResult(
+      success: false,
+      message: '未找到 VMware 可执行文件，请确认 VMware Workstation 已安装',
+      method: ConsoleMethod.notAvailable,
+    );
   }
 
   @override
@@ -486,6 +594,104 @@ class KvmLibvirtBackend extends VmBackend {
     await _virsh(['destroy', vmId]);
     final result = await _virsh(['undefine', vmId, '--remove-all-storage']);
     return result.exitCode == 0;
+  }
+
+  @override
+  Future<ConsoleResult> openConsole(String vmId, {String? vmName}) async {
+    // KVM/QEMU 控制台连接策略（按优先级）：
+    // 1. virt-viewer --connect qemu:///system <vmId>  (SPICE/VNC 图形界面，最佳体验)
+    // 2. remote-viewer spice://localhost:<port>       (SPICE 直连)
+    // 3. 在终端模拟器中运行 virsh console <vmId>      (串行控制台，文本模式)
+    final name = vmName ?? vmId;
+
+    // 策略1：virt-viewer（图形化，支持 SPICE/VNC）
+    try {
+      final which = await Process.run('which', ['virt-viewer']);
+      if (which.exitCode == 0) {
+        await Process.start(
+          'virt-viewer',
+          ['--connect', 'qemu:///system', '--wait', name],
+          mode: ProcessStartMode.detached,
+        );
+        return ConsoleResult(
+          success: true,
+          message: '已通过 virt-viewer 打开虚拟机图形控制台',
+          method: ConsoleMethod.virtViewer,
+        );
+      }
+    } catch (_) {}
+
+    // 策略2：remote-viewer（SPICE 直连）
+    try {
+      final which = await Process.run('which', ['remote-viewer']);
+      if (which.exitCode == 0) {
+        // 获取 SPICE 端口
+        final xmlResult = await _virsh(['dumpxml', name]);
+        if (xmlResult.exitCode == 0) {
+          final portMatch = RegExp(r"spice.*?port='(\d+)'")
+              .firstMatch(xmlResult.stdout as String);
+          final port = portMatch?.group(1) ?? '5900';
+          await Process.start(
+            'remote-viewer',
+            ['spice://localhost:$port'],
+            mode: ProcessStartMode.detached,
+          );
+          return ConsoleResult(
+            success: true,
+            message: '已通过 remote-viewer 连接 SPICE 控制台（端口 $port）',
+            method: ConsoleMethod.remoteViewer,
+          );
+        }
+      }
+    } catch (_) {}
+
+    // 策略3：在终端中运行 virsh console（串行文本控制台）
+    // 尝试多种终端模拟器
+    final terminals = [
+      ['gnome-terminal', '--', 'virsh', 'console', name],
+      ['xterm', '-e', 'virsh console $name'],
+      ['konsole', '-e', 'virsh', 'console', name],
+      ['xfce4-terminal', '-e', 'virsh console $name'],
+      ['lxterminal', '-e', 'virsh console $name'],
+    ];
+
+    for (final termArgs in terminals) {
+      try {
+        final which = await Process.run('which', [termArgs[0]]);
+        if (which.exitCode == 0) {
+          await Process.start(
+            termArgs[0],
+            termArgs.sublist(1),
+            mode: ProcessStartMode.detached,
+          );
+          return ConsoleResult(
+            success: true,
+            message: '已在 ${termArgs[0]} 中打开 virsh 串行控制台',
+            method: ConsoleMethod.virshConsole,
+          );
+        }
+      } catch (_) {}
+    }
+
+    // 最后降级：直接 virsh console（当前终端，阻塞）
+    try {
+      await Process.start(
+        'virsh',
+        ['console', name],
+        mode: ProcessStartMode.inheritStdio,
+      );
+      return ConsoleResult(
+        success: true,
+        message: '已在当前终端打开 virsh 串行控制台（按 Ctrl+] 退出）',
+        method: ConsoleMethod.virshConsole,
+      );
+    } catch (e) {
+      return ConsoleResult(
+        success: false,
+        message: '无法打开控制台：$e\n请安装 virt-viewer: sudo apt install virt-viewer',
+        method: ConsoleMethod.notAvailable,
+      );
+    }
   }
 
   @override

@@ -119,6 +119,13 @@ class VmManagerProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// 打开虚拟机控制台
+  /// [vmId] 为后端 VM ID（VMware: vmx 路径，KVM: UUID 或名称）
+  /// [vmName] 可选，用于 KVM virsh 命令中的名称参数
+  Future<ConsoleResult> openConsole(String vmId, {String? vmName}) async {
+    return _backend.openConsole(vmId, vmName: vmName);
+  }
+
   /// VMware 凭据配置（仅 Windows）
   void configureVmwareCredentials(String username, String password) {
     if (_backend is VmwareWorkstationBackend) {
