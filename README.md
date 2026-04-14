@@ -100,9 +100,9 @@ vmrest.exe -C
 vmrest.exe
 ```
 
-### Linux 下交叉编译 Windows 版本（MinGW + Qt5）
+### Linux 下交叉编译 Windows 版本（MinGW-w64）
 
-Flutter 官方不支持从 Linux 直接交叉编译 Windows 二进制，但可通过 **MinGW-w64 工具链 + Wine 运行时环境** 完成编译。以下步骤在 Ubuntu 22.04 / Debian 12 上验证通过。
+Flutter 官方不支持从 Linux 直接交叉编译 Windows 二进制，但可通过 **MinGW-w64 工具链** 绕过 Flutter CLI 直接调用 CMake 完成编译。以下步骤在 Ubuntu 22.04 / Debian 12 上验证通过。
 
 #### 第一步：安装 MinGW-w64 交叉编译工具链
 
@@ -113,53 +113,26 @@ sudo apt install -y \
   mingw-w64-tools \
   gcc-mingw-w64-x86-64 \
   g++-mingw-w64-x86-64 \
-  binutils-mingw-w64-x86-64
+  binutils-mingw-w64-x86-64 \
+  cmake ninja-build
 
 # 验证安装
 x86_64-w64-mingw32-gcc --version
 ```
 
-#### 第二步：安装 Wine（用于运行 Windows 工具链辅助程序）
+#### 第二步：克隆项目并安装 Flutter 依赖
 
 ```bash
-sudo dpkg --add-architecture i386
-sudo apt update
-sudo apt install -y wine wine32 wine64 winbind
-
-# 初始化 Wine 前缀
-winecfg   # 弹出配置窗口，选择 Windows 10，关闭即可
-```
-
-#### 第三步：安装 Qt5 MinGW 运行时库
-
-Flutter Windows 后端依赖 Qt5 的部分运行时组件（如 `Qt5Core.dll`、`Qt5Widgets.dll`）。
-
-```bash
-# 方式一：通过 apt 安装 Qt5 MinGW 交叉编译包（推荐）
-sudo apt install -y \
-  qt5-default \
-  qtbase5-dev \
-  libqt5core5a \
-  qttools5-dev-tools
-
-# 方式二：手动下载 Qt5 Windows 预编译包（适用于离线环境）
-# 从 https://download.qt.io/official_releases/qt/5.15/ 下载
-# qt-opensource-windows-x86-5.15.x-mingw81_64.exe
-# 使用 Wine 安装后，DLL 位于 ~/.wine/drive_c/Qt/5.15.x/mingw81_64/bin/
-```
-
-#### 第四步：配置 Flutter Windows 交叉编译环境
-
-```bash
-# 克隆项目
 git clone -b dev https://github.com/rakehellsx/penflow.git
 cd penflow
 
-# 安装 Flutter 依赖
 export PATH="$PATH:/path/to/flutter/bin"
 flutter pub get
+```
 
-# 配置 CMake 使用 MinGW 工具链
+#### 第三步：编写 CMake MinGW 工具链文件
+
+```bash
 cat > /tmp/mingw-toolchain.cmake << 'EOF'
 set(CMAKE_SYSTEM_NAME Windows)
 set(CMAKE_SYSTEM_PROCESSOR x86_64)
@@ -175,13 +148,10 @@ set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
 EOF
 ```
 
-#### 第五步：执行交叉编译
+#### 第四步：执行交叉编译
 
 ```bash
-# 进入 Flutter Windows 平台目录
 cd penflow/windows
-
-# 创建构建目录并使用 MinGW 工具链编译
 mkdir -p build_cross && cd build_cross
 
 cmake .. \
@@ -192,9 +162,9 @@ cmake .. \
 make -j$(nproc)
 ```
 
-#### 第六步：收集运行时依赖 DLL
+#### 第五步：收集运行时依赖 DLL
 
-编译完成后，需将 MinGW 运行时 DLL 和 Flutter 引擎 DLL 一并打包：
+编译完成后，需将 MinGW 运行时 DLL 和 Flutter 引擎 DLL 一并打包，才能在目标 Windows 机器上运行：
 
 ```bash
 mkdir -p /tmp/penflow_win_release
@@ -202,17 +172,24 @@ mkdir -p /tmp/penflow_win_release
 # 复制主程序
 cp penflow.exe /tmp/penflow_win_release/
 
-# 复制 MinGW 运行时 DLL
-DLL_PATH="/usr/x86_64-w64-mingw32/lib"
+# 复制 MinGW 运行时 DLL（必须）
 for dll in libgcc_s_seh-1.dll libstdc++-6.dll libwinpthread-1.dll; do
-  find /usr -name "$dll" 2>/dev/null | head -1 | xargs -I{} cp {} /tmp/penflow_win_release/
+  find /usr/lib/gcc/x86_64-w64-mingw32 /usr/x86_64-w64-mingw32 \
+    -name "$dll" 2>/dev/null | head -1 | xargs -I{} cp {} /tmp/penflow_win_release/
 done
 
-# 复制 Qt5 DLL（如使用 Wine 安装的 Qt5）
-QT5_BIN="$HOME/.wine/drive_c/Qt/5.15.2/mingw81_64/bin"
-if [ -d "$QT5_BIN" ]; then
-  cp "$QT5_BIN"/{Qt5Core,Qt5Gui,Qt5Widgets,Qt5Network}.dll /tmp/penflow_win_release/
-fi
+# 复制 Flutter Windows 引擎 DLL（从 Flutter SDK 缓存中获取）
+FLUTTER_ENGINE_DIR=$(flutter --version 2>/dev/null | grep -o 'Engine.*' | head -1)
+ENGINE_CACHE="$HOME/.pub-cache/hosted"
+# flutter_windows.dll 由 flutter build windows 生成，位于 build/windows/x64/runner/Release/
+# 交叉编译时需手动从 Flutter 引擎预编译包获取：
+# https://storage.googleapis.com/flutter_infra_release/releases/stable/windows/
+cp flutter_windows.dll /tmp/penflow_win_release/ 2>/dev/null || \
+  echo "请手动从 Flutter Windows 发布包中提取 flutter_windows.dll"
+
+# 复制 sqlite3.dll（sqlite3_flutter_libs 提供）
+find ~/.pub-cache -name "sqlite3.dll" 2>/dev/null | head -1 | \
+  xargs -I{} cp {} /tmp/penflow_win_release/
 
 # 打包
 cd /tmp && zip -r penflow_windows_x64.zip penflow_win_release/
@@ -223,7 +200,8 @@ cd /tmp && zip -r penflow_windows_x64.zip penflow_win_release/
 | 事项 | 说明 |
 |------|------|
 | Flutter 官方限制 | `flutter build windows` 命令本身仅支持在 Windows 宿主机运行，交叉编译需绕过 Flutter CLI 直接调用 CMake |
-| sqlite3 依赖 | 项目使用 `sqlite3_flutter_libs`，需确保 MinGW 版本的 `sqlite3.dll` 已包含在发布包中 |
+| flutter_windows.dll | Flutter 引擎的 Windows 版 DLL，需从 Flutter 官方 Windows 发布包中提取，或在 Windows 机器上构建一次后复制 |
+| sqlite3.dll | 项目使用 `sqlite3_flutter_libs`，该包会在 Windows 构建时自动提供对应 DLL，交叉编译时需手动从 pub-cache 中查找 |
 | 推荐替代方案 | 若有 CI/CD 环境，建议使用 **GitHub Actions** 的 `windows-latest` runner 完成 Windows 构建，更稳定可靠（见下方） |
 
 #### 推荐方案：GitHub Actions 自动构建
