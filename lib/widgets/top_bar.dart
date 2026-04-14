@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/workflow_provider.dart';
+import '../providers/auth_provider.dart';
 import '../utils/app_theme.dart';
 
 class TopBar extends StatelessWidget {
@@ -10,7 +11,10 @@ class TopBar extends StatelessWidget {
   final VoidCallback onAutoLayout;
   final VoidCallback onFitView;
   final VoidCallback onClear;
-  final VoidCallback onLoadChain;
+  final VoidCallback onToggleSidebar;
+  final bool sidebarCollapsed;
+  final VoidCallback onChangePassword;
+  final VoidCallback onLogout;
 
   const TopBar({
     super.key,
@@ -20,7 +24,10 @@ class TopBar extends StatelessWidget {
     required this.onAutoLayout,
     required this.onFitView,
     required this.onClear,
-    required this.onLoadChain,
+    required this.onToggleSidebar,
+    required this.sidebarCollapsed,
+    required this.onChangePassword,
+    required this.onLogout,
   });
 
   @override
@@ -37,7 +44,7 @@ class TopBar extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 12),
           child: Row(
             children: [
-              // Logo
+              // ── Logo ──────────────────────────────────────
               Row(
                 children: [
                   const Text('⚡', style: TextStyle(fontSize: 16)),
@@ -45,7 +52,9 @@ class TopBar extends StatelessWidget {
                   Text(
                     'PenFlow',
                     style: TextStyle(
-                      color: t.isDark ? AppAccent.blue : const Color(0xFF0969DA),
+                      color: t.isDark
+                          ? AppAccent.blue
+                          : const Color(0xFF0969DA),
                       fontSize: 14,
                       fontWeight: FontWeight.w700,
                       letterSpacing: 1,
@@ -54,50 +63,64 @@ class TopBar extends StatelessWidget {
                 ],
               ),
               _Divider(color: t.border),
-              // Action buttons
-              _TbButton(label: '💾 保存',  color: AppAccent.green,  onTap: onSave),
-              const SizedBox(width: 4),
-              _TbButton(label: '📂 加载',  onTap: onLoad),
-              const SizedBox(width: 4),
-              _TbButton(label: '📤 导出',  color: AppAccent.orange, onTap: onExport),
+
+              // ── 侧边栏收缩 ─────────────────────────────────
+              _TbButton(
+                label: sidebarCollapsed ? '▶ 展开' : '◀ 收起',
+                onTap: onToggleSidebar,
+              ),
               _Divider(color: t.border),
+
+              // ── 文件操作 ───────────────────────────────────
+              _TbButton(
+                  label: '💾 保存',
+                  color: AppAccent.green,
+                  onTap: onSave),
+              const SizedBox(width: 4),
+              _TbButton(label: '📂 加载', onTap: onLoad),
+              const SizedBox(width: 4),
+              _TbButton(
+                  label: '📤 导出',
+                  color: AppAccent.orange,
+                  onTap: onExport),
+              _Divider(color: t.border),
+
+              // ── 画布操作 ───────────────────────────────────
               _TbButton(label: '⚡ 自动布局', onTap: onAutoLayout),
               const SizedBox(width: 4),
               _TbButton(label: '🔭 适应视图', onTap: onFitView),
               const SizedBox(width: 4),
-              _TbButton(label: '🗑 清空',  hoverRed: true, onTap: onClear),
-              _Divider(color: t.border),
               _TbButton(
-                label: '🔗 加载攻击链',
-                color: AppAccent.purple,
-                onTap: onLoadChain,
-              ),
+                  label: '🗑 清空',
+                  hoverRed: true,
+                  onTap: onClear),
+
               const Spacer(),
-              // ── 主题切换按钮 ──
+
+              // ── 主题切换 ───────────────────────────────────
               _ThemeToggleButton(),
               _Divider(color: t.border),
-              // Status
+
+              // ── 状态信息 ───────────────────────────────────
               _StatusDot(),
               const SizedBox(width: 8),
-              Text(
-                '节点:${provider.nodes.length}',
-                style: TextStyle(color: t.text3, fontSize: 11),
-              ),
+              Text('节点:${provider.nodes.length}',
+                  style: TextStyle(color: t.text3, fontSize: 11)),
               const SizedBox(width: 12),
-              Text(
-                '连线:${provider.connections.length}',
-                style: TextStyle(color: t.text3, fontSize: 11),
-              ),
+              Text('连线:${provider.connections.length}',
+                  style: TextStyle(color: t.text3, fontSize: 11)),
               const SizedBox(width: 12),
-              Text(
-                '缩放:${(provider.scale * 100).round()}%',
-                style: TextStyle(color: AppAccent.yellow, fontSize: 11),
+              Text('缩放:${(provider.scale * 100).round()}%',
+                  style: TextStyle(
+                      color: AppAccent.yellow, fontSize: 11)),
+              _Divider(color: t.border),
+
+              // ── 用户菜单 ───────────────────────────────────
+              _UserMenu(
+                onChangePassword: onChangePassword,
+                onLogout: onLogout,
               ),
-              const SizedBox(width: 12),
-              Text(
-                '滚轮缩放 · 空格拖动',
-                style: TextStyle(color: t.text3, fontSize: 10),
-              ),
+              const SizedBox(width: 4),
             ],
           ),
         );
@@ -106,7 +129,118 @@ class TopBar extends StatelessWidget {
   }
 }
 
-// ── 主题切换按钮 ──────────────────────────────
+// ── 用户菜单 ──────────────────────────────────────────────
+class _UserMenu extends StatelessWidget {
+  final VoidCallback onChangePassword;
+  final VoidCallback onLogout;
+
+  const _UserMenu({
+    required this.onChangePassword,
+    required this.onLogout,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final t    = context.appTheme;
+    final auth = context.watch<AuthProvider>();
+    final username = auth.username ?? 'user';
+
+    return PopupMenuButton<String>(
+      color: t.panel,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(6),
+        side: BorderSide(color: t.border),
+      ),
+      offset: const Offset(0, 36),
+      tooltip: '',
+      onSelected: (value) {
+        if (value == 'change_pwd') onChangePassword();
+        if (value == 'logout') onLogout();
+      },
+      itemBuilder: (_) => [
+        PopupMenuItem<String>(
+          enabled: false,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(username,
+                  style: TextStyle(
+                      color: t.text,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600)),
+              Text(auth.role ?? 'user',
+                  style: TextStyle(color: AppAccent.blue, fontSize: 10)),
+            ],
+          ),
+        ),
+        PopupMenuDivider(height: 1),
+        PopupMenuItem<String>(
+          value: 'change_pwd',
+          child: Row(
+            children: [
+              Icon(Icons.lock_reset, color: t.text2, size: 14),
+              const SizedBox(width: 8),
+              Text('修改密码',
+                  style: TextStyle(color: t.text2, fontSize: 12)),
+            ],
+          ),
+        ),
+        PopupMenuItem<String>(
+          value: 'logout',
+          child: Row(
+            children: [
+              Icon(Icons.logout, color: AppAccent.red, size: 14),
+              const SizedBox(width: 8),
+              const Text('退出登录',
+                  style: TextStyle(
+                      color: AppAccent.red, fontSize: 12)),
+            ],
+          ),
+        ),
+      ],
+      child: Container(
+        padding:
+            const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(4),
+          border: Border.all(color: t.border),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 20,
+              height: 20,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: AppAccent.blue.withOpacity(0.2),
+                border: Border.all(
+                    color: AppAccent.blue.withOpacity(0.5)),
+              ),
+              alignment: Alignment.center,
+              child: Text(
+                username.isNotEmpty
+                    ? username[0].toUpperCase()
+                    : 'U',
+                style: TextStyle(
+                    color: AppAccent.blue,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700),
+              ),
+            ),
+            const SizedBox(width: 6),
+            Text(username,
+                style: TextStyle(color: t.text2, fontSize: 11)),
+            const SizedBox(width: 4),
+            Icon(Icons.arrow_drop_down, color: t.text3, size: 14),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── 主题切换按钮 ──────────────────────────────────────────
 class _ThemeToggleButton extends StatefulWidget {
   @override
   State<_ThemeToggleButton> createState() => _ThemeToggleButtonState();
@@ -115,19 +249,17 @@ class _ThemeToggleButton extends StatefulWidget {
 class _ThemeToggleButtonState extends State<_ThemeToggleButton>
     with SingleTickerProviderStateMixin {
   late AnimationController _ctrl;
-  late Animation<double> _rotate;
+  late Animation<double>   _rotate;
   bool _hovered = false;
 
   @override
   void initState() {
     super.initState();
     _ctrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 400),
-    );
+        vsync: this,
+        duration: const Duration(milliseconds: 400));
     _rotate = Tween<double>(begin: 0, end: 1).animate(
-      CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut),
-    );
+        CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut));
   }
 
   @override
@@ -138,18 +270,13 @@ class _ThemeToggleButtonState extends State<_ThemeToggleButton>
 
   void _toggle(ThemeProvider tp) {
     tp.toggle();
-    if (_ctrl.isCompleted) {
-      _ctrl.reverse();
-    } else {
-      _ctrl.forward();
-    }
+    _ctrl.isCompleted ? _ctrl.reverse() : _ctrl.forward();
   }
 
   @override
   Widget build(BuildContext context) {
     final t  = context.appTheme;
     final tp = context.watch<ThemeProvider>();
-
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
       onExit:  (_) => setState(() => _hovered = false),
@@ -157,23 +284,23 @@ class _ThemeToggleButtonState extends State<_ThemeToggleButton>
         onTap: () => _toggle(tp),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 150),
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+          padding:
+              const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(4),
             border: Border.all(
-              color: _hovered ? AppAccent.blue : t.border,
-            ),
-            color: _hovered ? AppAccent.blue.withOpacity(0.1) : Colors.transparent,
+                color: _hovered ? AppAccent.blue : t.border),
+            color: _hovered
+                ? AppAccent.blue.withOpacity(0.1)
+                : Colors.transparent,
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               RotationTransition(
                 turns: _rotate,
-                child: Text(
-                  tp.isDark ? '☀️' : '🌙',
-                  style: const TextStyle(fontSize: 13),
-                ),
+                child: Text(tp.isDark ? '☀️' : '🌙',
+                    style: const TextStyle(fontSize: 13)),
               ),
               const SizedBox(width: 5),
               AnimatedSwitcher(
@@ -196,7 +323,7 @@ class _ThemeToggleButtonState extends State<_ThemeToggleButton>
   }
 }
 
-// ── 分隔线 ────────────────────────────────────
+// ── 分隔线 ────────────────────────────────────────────────
 class _Divider extends StatelessWidget {
   final Color color;
   const _Divider({required this.color});
@@ -212,7 +339,7 @@ class _Divider extends StatelessWidget {
   }
 }
 
-// ── 工具栏按钮 ────────────────────────────────
+// ── 工具栏按钮 ────────────────────────────────────────────
 class _TbButton extends StatefulWidget {
   final String label;
   final Color? color;
@@ -238,7 +365,9 @@ class _TbButtonState extends State<_TbButton> {
     final t = context.appTheme;
     Color textColor = widget.color ?? t.text2;
     if (_hovered) {
-      textColor = widget.hoverRed ? AppAccent.red : (widget.color ?? AppAccent.blue);
+      textColor = widget.hoverRed
+          ? AppAccent.red
+          : (widget.color ?? AppAccent.blue);
     }
 
     return MouseRegion(
@@ -248,12 +377,15 @@ class _TbButtonState extends State<_TbButton> {
         onTap: widget.onTap,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 150),
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+          padding:
+              const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(4),
             border: Border.all(
               color: _hovered
-                  ? (widget.hoverRed ? AppAccent.red : (widget.color ?? AppAccent.blue))
+                  ? (widget.hoverRed
+                      ? AppAccent.red
+                      : (widget.color ?? AppAccent.blue))
                   : t.border,
             ),
             color: _hovered && widget.color != null
@@ -274,7 +406,7 @@ class _TbButtonState extends State<_TbButton> {
   }
 }
 
-// ── 状态指示灯 ────────────────────────────────
+// ── 状态指示灯 ────────────────────────────────────────────
 class _StatusDot extends StatefulWidget {
   @override
   State<_StatusDot> createState() => _StatusDotState();
@@ -283,16 +415,16 @@ class _StatusDot extends StatefulWidget {
 class _StatusDotState extends State<_StatusDot>
     with SingleTickerProviderStateMixin {
   late AnimationController _controller;
-  late Animation<double> _animation;
+  late Animation<double>   _animation;
 
   @override
   void initState() {
     super.initState();
     _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 2),
-    )..repeat(reverse: true);
-    _animation = Tween<double>(begin: 1.0, end: 0.3).animate(_controller);
+        vsync: this, duration: const Duration(seconds: 2))
+      ..repeat(reverse: true);
+    _animation =
+        Tween<double>(begin: 1.0, end: 0.3).animate(_controller);
   }
 
   @override
@@ -315,9 +447,8 @@ class _StatusDotState extends State<_StatusDot>
             color: AppAccent.green,
             boxShadow: [
               BoxShadow(
-                color: AppAccent.green.withOpacity(0.6),
-                blurRadius: 5,
-              )
+                  color: AppAccent.green.withOpacity(0.6),
+                  blurRadius: 5)
             ],
           ),
         ),
