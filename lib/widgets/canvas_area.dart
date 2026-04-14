@@ -80,11 +80,12 @@ class _CanvasAreaState extends State<CanvasArea> {
             },
             builder: (context, candidateData, rejectedData) {
               final isDropTarget = candidateData.isNotEmpty;
+              final t = context.appTheme;
               return Container(
                 decoration: BoxDecoration(
-                  color: AppColors.bg,
+                  color: t.bg,
                   border: isDropTarget
-                      ? Border.all(color: AppColors.blue.withOpacity(0.5), width: 2)
+                      ? Border.all(color: AppAccent.blue.withOpacity(0.5), width: 2)
                       : null,
                 ),
                 child: Listener(
@@ -151,6 +152,7 @@ class _CanvasAreaState extends State<CanvasArea> {
                               painter: GridPainter(
                                 scale: provider.scale,
                                 offset: provider.offset,
+                                gridColor: t.gridLine,
                               ),
                             ),
                           ),
@@ -254,13 +256,14 @@ class _CanvasAreaState extends State<CanvasArea> {
 class GridPainter extends CustomPainter {
   final double scale;
   final Offset offset;
+  final Color gridColor;
 
-  GridPainter({required this.scale, required this.offset});
+  GridPainter({required this.scale, required this.offset, required this.gridColor});
 
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = AppColors.border.withOpacity(0.3)
+      ..color = gridColor
       ..strokeWidth = 0.5;
 
     final gridSize = 30.0 * scale;
@@ -279,7 +282,7 @@ class GridPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(GridPainter oldDelegate) =>
-      oldDelegate.scale != scale || oldDelegate.offset != offset;
+      oldDelegate.scale != scale || oldDelegate.offset != offset || oldDelegate.gridColor != gridColor;
 }
 
 class _EmptyState extends StatelessWidget {
@@ -290,23 +293,19 @@ class _EmptyState extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(
-          '🎯',
-          style: TextStyle(
-            fontSize: 48,
-            color: AppColors.text3.withOpacity(0.5),
-          ),
-        ),
-        const SizedBox(height: 12),
-        const Text(
-          '从左侧工具箱拖拽工具到此处',
-          style: TextStyle(color: AppColors.text3, fontSize: 13),
-        ),
-        const SizedBox(height: 4),
-        const Text(
-          '或点击「加载攻击链」快速开始',
-          style: TextStyle(color: AppColors.text3, fontSize: 11),
-        ),
+        Builder(builder: (ctx) {
+          final t = ctx.appTheme;
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('🎯', style: TextStyle(fontSize: 48, color: t.text3.withOpacity(0.5))),
+              const SizedBox(height: 12),
+              Text('从左侧工具箱拖拽工具到此处', style: TextStyle(color: t.text3, fontSize: 13)),
+              const SizedBox(height: 4),
+              Text('或点击「加载攻击链」快速开始', style: TextStyle(color: t.text3, fontSize: 11)),
+            ],
+          );
+        }),
       ],
     );
   }
@@ -330,25 +329,28 @@ class _CanvasButtonState extends State<_CanvasButton> {
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
-      child: GestureDetector(
-        onTap: widget.onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-          decoration: BoxDecoration(
-            color: _hovered ? AppColors.card : AppColors.panel.withOpacity(0.8),
-            borderRadius: BorderRadius.circular(4),
-            border: Border.all(color: _hovered ? AppColors.blue : AppColors.border),
-          ),
-          child: Text(
-            widget.label,
-            style: TextStyle(
-              color: _hovered ? AppColors.blue : AppColors.text2,
-              fontSize: 11,
+      child: Builder(builder: (ctx) {
+        final t = ctx.appTheme;
+        return GestureDetector(
+          onTap: widget.onTap,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(
+              color: _hovered ? t.card : t.panel.withOpacity(0.8),
+              borderRadius: BorderRadius.circular(4),
+              border: Border.all(color: _hovered ? AppAccent.blue : t.border),
+            ),
+            child: Text(
+              widget.label,
+              style: TextStyle(
+                color: _hovered ? AppAccent.blue : t.text2,
+                fontSize: 11,
+              ),
             ),
           ),
-        ),
-      ),
+        );
+      }),
     );
   }
 }

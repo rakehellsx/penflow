@@ -19,7 +19,7 @@ class MainScreen extends StatefulWidget {
 class _MainScreenState extends State<MainScreen> {
   bool _vmPanelOpen = false;
   String? _vmPanelNodeId;
-  int _rightPanelTab = 0; // 0=docs, 1=logs, 2=report
+  int _rightPanelTab = 0;
 
   void _openVMPanel(String nodeId) {
     setState(() {
@@ -53,15 +53,15 @@ class _MainScreenState extends State<MainScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final t = context.appTheme;
     return Scaffold(
-      backgroundColor: AppColors.bg,
+      backgroundColor: t.bg,
       body: Column(
         children: [
-          // Top Bar
           TopBar(
-            onSave: () => context.read<WorkflowProvider>().saveWorkflow(),
-            onLoad: () => context.read<WorkflowProvider>().loadWorkflow(),
-            onExport: _showExportDialog,
+            onSave:       () => context.read<WorkflowProvider>().saveWorkflow(),
+            onLoad:       () => context.read<WorkflowProvider>().loadWorkflow(),
+            onExport:     _showExportDialog,
             onAutoLayout: () => context.read<WorkflowProvider>().autoLayout(),
             onFitView: () {
               final size = MediaQuery.of(context).size;
@@ -70,45 +70,37 @@ class _MainScreenState extends State<MainScreen> {
                 size.height - 44,
               ));
             },
-            onClear: _showClearConfirm,
+            onClear:     _showClearConfirm,
             onLoadChain: _showAttackChainDialog,
           ),
-          // Main Content
           Expanded(
             child: Stack(
               children: [
                 Row(
                   children: [
-                    // Left Sidebar
-                    const SizedBox(
-                      width: 260,
-                      child: Sidebar(),
-                    ),
-                    // Canvas Area
+                    const SizedBox(width: 260, child: Sidebar()),
                     Expanded(
                       child: CanvasArea(
                         onOpenVMPanel: _openVMPanel,
-                        onSwitchTab: _switchRightTab,
+                        onSwitchTab:   _switchRightTab,
                       ),
                     ),
-                    // Right Panel
                     SizedBox(
                       width: 300,
                       child: RightPanel(
-                        activeTab: _rightPanelTab,
+                        activeTab:   _rightPanelTab,
                         onTabChange: _switchRightTab,
                       ),
                     ),
                   ],
                 ),
-                // VM Panel (bottom slide-up)
                 if (_vmPanelOpen)
                   Positioned(
                     bottom: 0,
-                    left: 260,
-                    right: 300,
+                    left:   260,
+                    right:  300,
                     child: VmPanel(
-                      nodeId: _vmPanelNodeId!,
+                      nodeId:  _vmPanelNodeId!,
                       onClose: _closeVMPanel,
                     ),
                   ),
@@ -121,20 +113,21 @@ class _MainScreenState extends State<MainScreen> {
   }
 
   void _showExportDialog() {
-    final provider = context.read<WorkflowProvider>();
-    final json = provider.exportWorkflow();
+    final t    = context.appTheme;
+    final json = context.read<WorkflowProvider>().exportWorkflow();
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.panel,
-        title: const Text('导出工作流', style: TextStyle(color: AppColors.text, fontSize: 14)),
+        backgroundColor: t.panel,
+        title: Text('导出工作流',
+            style: TextStyle(color: t.text, fontSize: 14)),
         content: SizedBox(
           width: 600,
           height: 400,
           child: SelectableText(
             json,
-            style: const TextStyle(
-              color: AppColors.text2,
+            style: TextStyle(
+              color: t.text2,
               fontSize: 11,
               fontFamily: 'Consolas',
             ),
@@ -143,7 +136,8 @@ class _MainScreenState extends State<MainScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('关闭', style: TextStyle(color: AppColors.blue)),
+            child: const Text('关闭',
+                style: TextStyle(color: AppAccent.blue)),
           ),
         ],
       ),
@@ -151,26 +145,29 @@ class _MainScreenState extends State<MainScreen> {
   }
 
   void _showClearConfirm() {
+    final t = context.appTheme;
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.panel,
-        title: const Text('清空画布', style: TextStyle(color: AppColors.text, fontSize: 14)),
-        content: const Text(
+        backgroundColor: t.panel,
+        title: Text('清空画布',
+            style: TextStyle(color: t.text, fontSize: 14)),
+        content: Text(
           '确定要清空所有节点和连线吗？此操作不可撤销。',
-          style: TextStyle(color: AppColors.text2, fontSize: 12),
+          style: TextStyle(color: t.text2, fontSize: 12),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('取消', style: TextStyle(color: AppColors.text2)),
+            child: Text('取消', style: TextStyle(color: t.text2)),
           ),
           TextButton(
             onPressed: () {
               context.read<WorkflowProvider>().clearCanvas();
               Navigator.pop(ctx);
             },
-            child: const Text('清空', style: TextStyle(color: AppColors.red)),
+            child: const Text('清空',
+                style: TextStyle(color: AppAccent.red)),
           ),
         ],
       ),

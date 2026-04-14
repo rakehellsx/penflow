@@ -8,18 +8,39 @@ void main() {
   runApp(const PenFlowApp());
 }
 
-class PenFlowApp extends StatelessWidget {
+class PenFlowApp extends StatefulWidget {
   const PenFlowApp({super.key});
 
   @override
+  State<PenFlowApp> createState() => _PenFlowAppState();
+}
+
+class _PenFlowAppState extends State<PenFlowApp> {
+  final _themeProvider = ThemeProvider();
+
+  @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider(
-      create: (_) => WorkflowProvider(),
-      child: MaterialApp(
-        title: 'PenFlow',
-        debugShowCheckedModeBanner: false,
-        theme: AppTheme.darkTheme,
-        home: const MainScreen(),
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider.value(value: _themeProvider),
+        ChangeNotifierProvider(create: (_) => WorkflowProvider()),
+      ],
+      child: AppThemeScope(
+        provider: _themeProvider,
+        child: Builder(
+          builder: (ctx) {
+            final t = ctx.appTheme;
+            return AnimatedBuilder(
+              animation: _themeProvider,
+              builder: (_, __) => MaterialApp(
+                title: 'PenFlow',
+                debugShowCheckedModeBanner: false,
+                theme: AppMaterialTheme.build(t),
+                home: const MainScreen(),
+              ),
+            );
+          },
+        ),
       ),
     );
   }

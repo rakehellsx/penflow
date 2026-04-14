@@ -25,26 +25,27 @@ class TopBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = context.appTheme;
     return Consumer<WorkflowProvider>(
       builder: (context, provider, _) {
         return Container(
           height: 44,
-          decoration: const BoxDecoration(
-            color: AppColors.panel,
-            border: Border(bottom: BorderSide(color: AppColors.border)),
+          decoration: BoxDecoration(
+            color: t.panel,
+            border: Border(bottom: BorderSide(color: t.border)),
           ),
           padding: const EdgeInsets.symmetric(horizontal: 12),
           child: Row(
             children: [
               // Logo
-              const Row(
+              Row(
                 children: [
-                  Text('⚡', style: TextStyle(fontSize: 16)),
-                  SizedBox(width: 6),
+                  const Text('⚡', style: TextStyle(fontSize: 16)),
+                  const SizedBox(width: 6),
                   Text(
                     'PenFlow',
                     style: TextStyle(
-                      color: AppColors.blue,
+                      color: t.isDark ? AppAccent.blue : const Color(0xFF0969DA),
                       fontSize: 14,
                       fontWeight: FontWeight.w700,
                       letterSpacing: 1,
@@ -52,47 +53,50 @@ class TopBar extends StatelessWidget {
                   ),
                 ],
               ),
-              const _Divider(),
+              _Divider(color: t.border),
               // Action buttons
-              _TbButton(label: '💾 保存', color: AppColors.green, onTap: onSave),
+              _TbButton(label: '💾 保存',  color: AppAccent.green,  onTap: onSave),
               const SizedBox(width: 4),
-              _TbButton(label: '📂 加载', onTap: onLoad),
+              _TbButton(label: '📂 加载',  onTap: onLoad),
               const SizedBox(width: 4),
-              _TbButton(label: '📤 导出', color: AppColors.orange, onTap: onExport),
-              const _Divider(),
+              _TbButton(label: '📤 导出',  color: AppAccent.orange, onTap: onExport),
+              _Divider(color: t.border),
               _TbButton(label: '⚡ 自动布局', onTap: onAutoLayout),
               const SizedBox(width: 4),
               _TbButton(label: '🔭 适应视图', onTap: onFitView),
               const SizedBox(width: 4),
-              _TbButton(label: '🗑 清空', hoverRed: true, onTap: onClear),
-              const _Divider(),
+              _TbButton(label: '🗑 清空',  hoverRed: true, onTap: onClear),
+              _Divider(color: t.border),
               _TbButton(
                 label: '🔗 加载攻击链',
-                color: AppColors.purple,
+                color: AppAccent.purple,
                 onTap: onLoadChain,
               ),
               const Spacer(),
+              // ── 主题切换按钮 ──
+              _ThemeToggleButton(),
+              _Divider(color: t.border),
               // Status
-              const _StatusDot(),
+              _StatusDot(),
               const SizedBox(width: 8),
               Text(
                 '节点:${provider.nodes.length}',
-                style: const TextStyle(color: AppColors.text3, fontSize: 11),
+                style: TextStyle(color: t.text3, fontSize: 11),
               ),
               const SizedBox(width: 12),
               Text(
                 '连线:${provider.connections.length}',
-                style: const TextStyle(color: AppColors.text3, fontSize: 11),
+                style: TextStyle(color: t.text3, fontSize: 11),
               ),
               const SizedBox(width: 12),
               Text(
                 '缩放:${(provider.scale * 100).round()}%',
-                style: const TextStyle(color: AppColors.yellow, fontSize: 11),
+                style: TextStyle(color: AppAccent.yellow, fontSize: 11),
               ),
               const SizedBox(width: 12),
-              const Text(
+              Text(
                 '滚轮缩放 · 空格拖动',
-                style: TextStyle(color: AppColors.text3, fontSize: 10),
+                style: TextStyle(color: t.text3, fontSize: 10),
               ),
             ],
           ),
@@ -102,8 +106,100 @@ class TopBar extends StatelessWidget {
   }
 }
 
+// ── 主题切换按钮 ──────────────────────────────
+class _ThemeToggleButton extends StatefulWidget {
+  @override
+  State<_ThemeToggleButton> createState() => _ThemeToggleButtonState();
+}
+
+class _ThemeToggleButtonState extends State<_ThemeToggleButton>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _ctrl;
+  late Animation<double> _rotate;
+  bool _hovered = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 400),
+    );
+    _rotate = Tween<double>(begin: 0, end: 1).animate(
+      CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  void _toggle(ThemeProvider tp) {
+    tp.toggle();
+    if (_ctrl.isCompleted) {
+      _ctrl.reverse();
+    } else {
+      _ctrl.forward();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t  = context.appTheme;
+    final tp = context.watch<ThemeProvider>();
+
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit:  (_) => setState(() => _hovered = false),
+      child: GestureDetector(
+        onTap: () => _toggle(tp),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(4),
+            border: Border.all(
+              color: _hovered ? AppAccent.blue : t.border,
+            ),
+            color: _hovered ? AppAccent.blue.withOpacity(0.1) : Colors.transparent,
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              RotationTransition(
+                turns: _rotate,
+                child: Text(
+                  tp.isDark ? '☀️' : '🌙',
+                  style: const TextStyle(fontSize: 13),
+                ),
+              ),
+              const SizedBox(width: 5),
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 200),
+                child: Text(
+                  tp.isDark ? '亮色' : '暗色',
+                  key: ValueKey(tp.isDark),
+                  style: TextStyle(
+                    color: _hovered ? AppAccent.blue : t.text2,
+                    fontSize: 11,
+                    fontFamily: 'Consolas',
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── 分隔线 ────────────────────────────────────
 class _Divider extends StatelessWidget {
-  const _Divider();
+  final Color color;
+  const _Divider({required this.color});
 
   @override
   Widget build(BuildContext context) {
@@ -111,11 +207,12 @@ class _Divider extends StatelessWidget {
       width: 1,
       height: 20,
       margin: const EdgeInsets.symmetric(horizontal: 8),
-      color: AppColors.border,
+      color: color,
     );
   }
 }
 
+// ── 工具栏按钮 ────────────────────────────────
 class _TbButton extends StatefulWidget {
   final String label;
   final Color? color;
@@ -138,14 +235,15 @@ class _TbButtonState extends State<_TbButton> {
 
   @override
   Widget build(BuildContext context) {
-    Color textColor = widget.color ?? AppColors.text2;
+    final t = context.appTheme;
+    Color textColor = widget.color ?? t.text2;
     if (_hovered) {
-      textColor = widget.hoverRed ? AppColors.red : (widget.color ?? AppColors.blue);
+      textColor = widget.hoverRed ? AppAccent.red : (widget.color ?? AppAccent.blue);
     }
 
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
+      onExit:  (_) => setState(() => _hovered = false),
       child: GestureDetector(
         onTap: widget.onTap,
         child: AnimatedContainer(
@@ -155,8 +253,8 @@ class _TbButtonState extends State<_TbButton> {
             borderRadius: BorderRadius.circular(4),
             border: Border.all(
               color: _hovered
-                  ? (widget.hoverRed ? AppColors.red : (widget.color ?? AppColors.blue))
-                  : AppColors.border,
+                  ? (widget.hoverRed ? AppAccent.red : (widget.color ?? AppAccent.blue))
+                  : t.border,
             ),
             color: _hovered && widget.color != null
                 ? widget.color!.withOpacity(0.1)
@@ -176,14 +274,14 @@ class _TbButtonState extends State<_TbButton> {
   }
 }
 
+// ── 状态指示灯 ────────────────────────────────
 class _StatusDot extends StatefulWidget {
-  const _StatusDot();
-
   @override
   State<_StatusDot> createState() => _StatusDotState();
 }
 
-class _StatusDotState extends State<_StatusDot> with SingleTickerProviderStateMixin {
+class _StatusDotState extends State<_StatusDot>
+    with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _animation;
 
@@ -214,8 +312,13 @@ class _StatusDotState extends State<_StatusDot> with SingleTickerProviderStateMi
           height: 7,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: AppColors.green,
-            boxShadow: [BoxShadow(color: AppColors.green.withOpacity(0.6), blurRadius: 5)],
+            color: AppAccent.green,
+            boxShadow: [
+              BoxShadow(
+                color: AppAccent.green.withOpacity(0.6),
+                blurRadius: 5,
+              )
+            ],
           ),
         ),
       ),

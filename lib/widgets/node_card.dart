@@ -42,10 +42,8 @@ class _NodeCardState extends State<NodeCard> {
 
   ToolDefinition? get _tool =>
       kTools.where((t) => t.id == widget.node.toolId).firstOrNull;
-
   ToolCategory? get _cat =>
       _tool != null ? kCategories[_tool!.catId] : null;
-
   VirtualMachine? get _vm =>
       widget.node.vmId != null
           ? kVirtualMachines.where((v) => v.id == widget.node.vmId).firstOrNull
@@ -54,35 +52,37 @@ class _NodeCardState extends State<NodeCard> {
   @override
   Widget build(BuildContext context) {
     final tool = _tool;
-    final cat = _cat;
+    final cat  = _cat;
     if (tool == null || cat == null) return const SizedBox.shrink();
+    final t = context.appTheme;
 
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
+      onExit:  (_) => setState(() => _hovered = false),
       child: GestureDetector(
         onTap: widget.onTap,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 120),
           width: 230,
           decoration: BoxDecoration(
-            color: AppColors.node,
+            color: t.node,
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
               color: widget.isSelected
-                  ? AppColors.blue
-                  : (_hovered ? AppColors.borderHi : AppColors.border),
+                  ? AppAccent.blue
+                  : (_hovered ? t.borderHi : t.border),
               width: widget.isSelected ? 1.5 : 1,
             ),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(widget.isSelected ? 0.7 : 0.5),
-                blurRadius: widget.isSelected ? 22 : 16,
+                color: (t.isDark ? Colors.black : Colors.grey.shade400)
+                    .withOpacity(widget.isSelected ? 0.6 : 0.3),
+                blurRadius: widget.isSelected ? 22 : 12,
                 offset: const Offset(0, 3),
               ),
               if (widget.isSelected)
                 BoxShadow(
-                  color: AppColors.blue.withOpacity(0.15),
+                  color: AppAccent.blue.withOpacity(0.15),
                   blurRadius: 12,
                   spreadRadius: 1,
                 ),
@@ -91,9 +91,9 @@ class _NodeCardState extends State<NodeCard> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              _buildHeader(tool, cat),
-              _buildBody(tool),
-              _buildFooter(),
+              _buildHeader(tool, cat, t),
+              _buildBody(t),
+              _buildFooter(t),
             ],
           ),
         ),
@@ -101,7 +101,7 @@ class _NodeCardState extends State<NodeCard> {
     );
   }
 
-  Widget _buildHeader(ToolDefinition tool, ToolCategory cat) {
+  Widget _buildHeader(ToolDefinition tool, ToolCategory cat, AppThemeData t) {
     return GestureDetector(
       onPanUpdate: (details) => widget.onMove(details.delta),
       child: MouseRegion(
@@ -109,15 +109,14 @@ class _NodeCardState extends State<NodeCard> {
         child: Container(
           padding: const EdgeInsets.fromLTRB(9, 7, 9, 7),
           decoration: BoxDecoration(
-            color: cat.color.withOpacity(0.16),
+            color: cat.color.withOpacity(t.isDark ? 0.16 : 0.10),
             borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
-            border: const Border(bottom: BorderSide(color: AppColors.border)),
+            border: Border(bottom: BorderSide(color: t.border)),
           ),
           child: Row(
             children: [
               Container(
-                width: 22,
-                height: 22,
+                width: 22, height: 22,
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(4),
                   color: cat.color.withOpacity(0.25),
@@ -129,8 +128,8 @@ class _NodeCardState extends State<NodeCard> {
               Expanded(
                 child: Text(
                   tool.name,
-                  style: const TextStyle(
-                    color: AppColors.text,
+                  style: TextStyle(
+                    color: t.text,
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
                   ),
@@ -156,11 +155,7 @@ class _NodeCardState extends State<NodeCard> {
               const SizedBox(width: 4),
               _StatusDot(status: widget.node.status),
               const SizedBox(width: 4),
-              _IconBtn(
-                icon: '✕',
-                hoverColor: AppColors.red,
-                onTap: widget.onDelete,
-              ),
+              _IconBtn(icon: '✕', hoverColor: AppAccent.red, onTap: widget.onDelete),
             ],
           ),
         ),
@@ -168,7 +163,7 @@ class _NodeCardState extends State<NodeCard> {
     );
   }
 
-  Widget _buildBody(ToolDefinition tool) {
+  Widget _buildBody(AppThemeData t) {
     return Container(
       padding: const EdgeInsets.all(9),
       child: Column(
@@ -179,7 +174,8 @@ class _NodeCardState extends State<NodeCard> {
             payload: widget.node.payload,
             onTap: () => _showPayloadDialog(context),
             onClear: () {
-              context.read<WorkflowProvider>().setNodePayload(widget.node.id, null, null);
+              context.read<WorkflowProvider>()
+                  .setNodePayload(widget.node.id, null, null);
             },
           ),
         ],
@@ -187,11 +183,11 @@ class _NodeCardState extends State<NodeCard> {
     );
   }
 
-  Widget _buildFooter() {
+  Widget _buildFooter(AppThemeData t) {
     return Container(
       padding: const EdgeInsets.fromLTRB(9, 5, 9, 5),
-      decoration: const BoxDecoration(
-        border: Border(top: BorderSide(color: AppColors.border)),
+      decoration: BoxDecoration(
+        border: Border(top: BorderSide(color: t.border)),
       ),
       child: Row(
         children: [
@@ -204,10 +200,7 @@ class _NodeCardState extends State<NodeCard> {
           const SizedBox(width: 5),
           _DupButton(onTap: widget.onDuplicate),
           const SizedBox(width: 5),
-          _OutPort(
-            nodeId: widget.node.id,
-            onDragStart: widget.onPortDragStart,
-          ),
+          _OutPort(nodeId: widget.node.id, onDragStart: widget.onPortDragStart),
         ],
       ),
     );
@@ -224,12 +217,13 @@ class _NodeCardState extends State<NodeCard> {
     if (result != null && context.mounted) {
       final parts = result.split('/');
       final fileName = parts.last;
-      context.read<WorkflowProvider>().setNodePayload(widget.node.id, fileName, result);
+      context.read<WorkflowProvider>()
+          .setNodePayload(widget.node.id, fileName, result);
     }
   }
 }
 
-// ── Sub-widgets ──
+// ── Sub-widgets ──────────────────────────────
 
 class _StatusDot extends StatelessWidget {
   final NodeStatus status;
@@ -239,10 +233,10 @@ class _StatusDot extends StatelessWidget {
   Widget build(BuildContext context) {
     Color color;
     switch (status) {
-      case NodeStatus.running: color = AppColors.yellow; break;
-      case NodeStatus.done: color = AppColors.green; break;
-      case NodeStatus.error: color = AppColors.red; break;
-      default: color = AppColors.text3;
+      case NodeStatus.running: color = AppAccent.yellow; break;
+      case NodeStatus.done:    color = AppAccent.green;  break;
+      case NodeStatus.error:   color = AppAccent.red;    break;
+      default:                 color = context.appTheme.text3;
     }
     return Container(
       width: 6, height: 6,
@@ -271,9 +265,10 @@ class _IconBtnState extends State<_IconBtn> {
 
   @override
   Widget build(BuildContext context) {
+    final t = context.appTheme;
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
+      onExit:  (_) => setState(() => _hovered = false),
       child: GestureDetector(
         onTap: widget.onTap,
         child: AnimatedContainer(
@@ -285,7 +280,8 @@ class _IconBtnState extends State<_IconBtn> {
           ),
           alignment: Alignment.center,
           child: Text(widget.icon,
-            style: TextStyle(color: _hovered ? Colors.white : AppColors.text3, fontSize: 10)),
+              style: TextStyle(
+                  color: _hovered ? Colors.white : t.text3, fontSize: 10)),
         ),
       ),
     );
@@ -306,10 +302,11 @@ class _VmSelectorState extends State<_VmSelector> {
 
   @override
   Widget build(BuildContext context) {
+    final t = context.appTheme;
     final hasVm = widget.vm != null;
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
+      onExit:  (_) => setState(() => _hovered = false),
       child: GestureDetector(
         onTap: widget.onTap,
         child: AnimatedContainer(
@@ -317,18 +314,24 @@ class _VmSelectorState extends State<_VmSelector> {
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(4),
-            border: Border.all(color: _hovered ? AppColors.blue : AppColors.border),
-            color: AppColors.bg,
+            border: Border.all(
+                color: _hovered ? AppAccent.blue : t.border),
+            color: t.bg,
           ),
           child: Row(
             children: [
-              Text(hasVm ? widget.vm!.icon : '🖥', style: const TextStyle(fontSize: 12)),
+              Text(hasVm ? widget.vm!.icon : '🖥',
+                  style: const TextStyle(fontSize: 12)),
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
-                  hasVm ? '${widget.vm!.name} · ${widget.vm!.ip}' : '选择目标虚拟机...',
+                  hasVm
+                      ? '${widget.vm!.name} · ${widget.vm!.ip}'
+                      : '选择目标虚拟机...',
                   style: TextStyle(
-                    color: hasVm ? (_hovered ? AppColors.blue : AppColors.text2) : AppColors.text3,
+                    color: hasVm
+                        ? (_hovered ? AppAccent.blue : t.text2)
+                        : t.text3,
                     fontSize: 10,
                   ),
                   overflow: TextOverflow.ellipsis,
@@ -337,7 +340,9 @@ class _VmSelectorState extends State<_VmSelector> {
               if (hasVm)
                 Container(
                   width: 6, height: 6,
-                  decoration: BoxDecoration(shape: BoxShape.circle, color: widget.vm!.statusColor),
+                  decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: widget.vm!.statusColor),
                 ),
             ],
           ),
@@ -351,7 +356,8 @@ class _PayloadSelector extends StatefulWidget {
   final String? payload;
   final VoidCallback onTap;
   final VoidCallback onClear;
-  const _PayloadSelector({this.payload, required this.onTap, required this.onClear});
+  const _PayloadSelector(
+      {this.payload, required this.onTap, required this.onClear});
 
   @override
   State<_PayloadSelector> createState() => _PayloadSelectorState();
@@ -362,13 +368,14 @@ class _PayloadSelectorState extends State<_PayloadSelector> {
 
   @override
   Widget build(BuildContext context) {
+    final t = context.appTheme;
     final hasPayload = widget.payload != null;
     return Row(
       children: [
         Expanded(
           child: MouseRegion(
             onEnter: (_) => setState(() => _hovered = true),
-            onExit: (_) => setState(() => _hovered = false),
+            onExit:  (_) => setState(() => _hovered = false),
             child: GestureDetector(
               onTap: widget.onTap,
               child: AnimatedContainer(
@@ -377,8 +384,9 @@ class _PayloadSelectorState extends State<_PayloadSelector> {
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(4),
                   border: Border.all(
-                    color: _hovered ? AppColors.orange : AppColors.border,
+                    color: _hovered ? AppAccent.orange : t.border,
                   ),
+                  color: t.bg,
                 ),
                 child: Row(
                   children: [
@@ -386,11 +394,13 @@ class _PayloadSelectorState extends State<_PayloadSelector> {
                     const SizedBox(width: 6),
                     Expanded(
                       child: Text(
-                        hasPayload ? widget.payload! : '从平台文件系统选择载荷...',
+                        hasPayload
+                            ? widget.payload!
+                            : '从平台文件系统选择载荷...',
                         style: TextStyle(
                           color: hasPayload
-                              ? (_hovered ? AppColors.orange : AppColors.text2)
-                              : AppColors.text3,
+                              ? (_hovered ? AppAccent.orange : t.text2)
+                              : t.text3,
                           fontSize: 10,
                         ),
                         overflow: TextOverflow.ellipsis,
@@ -404,7 +414,8 @@ class _PayloadSelectorState extends State<_PayloadSelector> {
         ),
         if (hasPayload) ...[
           const SizedBox(width: 4),
-          _IconBtn(icon: '✕', hoverColor: AppColors.red, onTap: widget.onClear),
+          _IconBtn(
+              icon: '✕', hoverColor: AppAccent.red, onTap: widget.onClear),
         ],
       ],
     );
@@ -427,7 +438,7 @@ class _EnterVmButtonState extends State<_EnterVmButton> {
   Widget build(BuildContext context) {
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
+      onExit:  (_) => setState(() => _hovered = false),
       child: GestureDetector(
         onTap: widget.onTap,
         child: AnimatedContainer(
@@ -437,12 +448,14 @@ class _EnterVmButtonState extends State<_EnterVmButton> {
             borderRadius: BorderRadius.circular(3),
             border: Border.all(
               color: widget.hasVm
-                  ? (_hovered ? AppColors.blue : AppColors.blue.withOpacity(0.5))
-                  : AppColors.text3,
+                  ? (_hovered
+                      ? AppAccent.blue
+                      : AppAccent.blue.withOpacity(0.5))
+                  : context.appTheme.text3,
             ),
             color: widget.hasVm && _hovered
-                ? AppColors.blue.withOpacity(0.2)
-                : AppColors.blue.withOpacity(0.08),
+                ? AppAccent.blue.withOpacity(0.2)
+                : AppAccent.blue.withOpacity(0.08),
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -452,7 +465,9 @@ class _EnterVmButtonState extends State<_EnterVmButton> {
               Text(
                 '进入虚拟机',
                 style: TextStyle(
-                  color: widget.hasVm ? AppColors.blue : AppColors.text3,
+                  color: widget.hasVm
+                      ? AppAccent.blue
+                      : context.appTheme.text3,
                   fontSize: 10,
                 ),
               ),
@@ -477,9 +492,10 @@ class _DupButtonState extends State<_DupButton> {
 
   @override
   Widget build(BuildContext context) {
+    final t = context.appTheme;
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
+      onExit:  (_) => setState(() => _hovered = false),
       child: GestureDetector(
         onTap: widget.onTap,
         child: AnimatedContainer(
@@ -487,10 +503,13 @@ class _DupButtonState extends State<_DupButton> {
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(3),
-            border: Border.all(color: _hovered ? AppColors.blue : AppColors.border),
+            border: Border.all(
+                color: _hovered ? AppAccent.blue : t.border),
           ),
           child: Text('⧉',
-            style: TextStyle(color: _hovered ? AppColors.blue : AppColors.text3, fontSize: 10)),
+              style: TextStyle(
+                  color: _hovered ? AppAccent.blue : t.text3,
+                  fontSize: 10)),
         ),
       ),
     );
@@ -511,9 +530,10 @@ class _OutPortState extends State<_OutPort> {
 
   @override
   Widget build(BuildContext context) {
+    final t = context.appTheme;
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
+      onExit:  (_) => setState(() => _hovered = false),
       cursor: SystemMouseCursors.click,
       child: GestureDetector(
         onTap: () => widget.onDragStart(widget.nodeId),
@@ -522,9 +542,9 @@ class _OutPortState extends State<_OutPort> {
           width: 14, height: 14,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: _hovered ? AppColors.blue : AppColors.bg,
+            color: _hovered ? AppAccent.blue : t.bg,
             border: Border.all(
-              color: _hovered ? AppColors.blue : AppColors.border,
+              color: _hovered ? AppAccent.blue : t.border,
               width: 2,
             ),
           ),
@@ -534,7 +554,7 @@ class _OutPortState extends State<_OutPort> {
   }
 }
 
-// ── Payload Dialog ──
+// ── Payload Dialog ────────────────────────────
 
 class _PayloadDialog extends StatefulWidget {
   final String nodeId;
@@ -551,14 +571,15 @@ class _PayloadDialogState extends State<_PayloadDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final t = context.appTheme;
     return Dialog(
-      backgroundColor: AppColors.panel,
+      backgroundColor: t.panel,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       child: SizedBox(
         width: 680, height: 520,
         child: Column(
           children: [
-            _buildHeader(),
+            _buildHeader(t),
             Expanded(
               child: Row(
                 children: [
@@ -566,10 +587,11 @@ class _PayloadDialogState extends State<_PayloadDialog> {
                     width: 200,
                     child: _FsTree(
                       currentPath: _currentPath,
-                      onPathChange: (p) => setState(() => _currentPath = p),
+                      onPathChange: (p) =>
+                          setState(() => _currentPath = p),
                     ),
                   ),
-                  Container(width: 1, color: AppColors.border),
+                  Container(width: 1, color: t.border),
                   Expanded(
                     child: _FsFiles(
                       path: _currentPath,
@@ -580,28 +602,31 @@ class _PayloadDialogState extends State<_PayloadDialog> {
                 ],
               ),
             ),
-            _buildFooter(context),
+            _buildFooter(context, t),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildHeader() {
+  Widget _buildHeader(AppThemeData t) {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-      decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: AppColors.border)),
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: t.border)),
       ),
       child: Row(
         children: [
           const Text('📁', style: TextStyle(fontSize: 16)),
           const SizedBox(width: 8),
-          const Text('平台文件系统',
-            style: TextStyle(color: AppColors.text, fontSize: 13, fontWeight: FontWeight.w600)),
+          Text('平台文件系统',
+              style: TextStyle(
+                  color: t.text,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600)),
           const Spacer(),
           IconButton(
-            icon: const Icon(Icons.close, color: AppColors.text3, size: 16),
+            icon: Icon(Icons.close, color: t.text3, size: 16),
             onPressed: () => Navigator.pop(context),
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(),
@@ -611,32 +636,35 @@ class _PayloadDialogState extends State<_PayloadDialog> {
     );
   }
 
-  Widget _buildFooter(BuildContext context) {
+  Widget _buildFooter(BuildContext context, AppThemeData t) {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-      decoration: const BoxDecoration(
-        border: Border(top: BorderSide(color: AppColors.border)),
+      decoration: BoxDecoration(
+        border: Border(top: BorderSide(color: t.border)),
       ),
       child: Row(
         children: [
           Text(
             _selectedFile != null ? '已选择: $_selectedFile' : '未选择文件',
-            style: const TextStyle(color: AppColors.text2, fontSize: 11),
+            style: TextStyle(color: t.text2, fontSize: 11),
           ),
           const Spacer(),
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('取消', style: TextStyle(color: AppColors.text2, fontSize: 11)),
+            child: Text('取消',
+                style: TextStyle(color: t.text2, fontSize: 11)),
           ),
           const SizedBox(width: 8),
           ElevatedButton(
             onPressed: _selectedFile != null
-                ? () => Navigator.pop(context, '$_currentPath/$_selectedFile')
+                ? () => Navigator.pop(
+                    context, '$_currentPath/$_selectedFile')
                 : null,
             style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.blue,
+              backgroundColor: AppAccent.blue,
               foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               textStyle: const TextStyle(fontSize: 11),
             ),
             child: const Text('确认选择'),
@@ -654,6 +682,7 @@ class _FsTree extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = context.appTheme;
     final items = <Widget>[];
     for (final root in kFsTree['/'] ?? []) {
       final rootPath = '/$root';
@@ -671,7 +700,7 @@ class _FsTree extends StatelessWidget {
         ));
       }
     }
-    return Container(color: AppColors.bg, child: ListView(children: items));
+    return Container(color: t.bg, child: ListView(children: items));
   }
 }
 
@@ -694,28 +723,29 @@ class _FsTreeItemState extends State<_FsTreeItem> {
 
   @override
   Widget build(BuildContext context) {
+    final t = context.appTheme;
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
+      onExit:  (_) => setState(() => _hovered = false),
       child: GestureDetector(
         onTap: widget.onTap,
         child: Container(
-          padding: EdgeInsets.fromLTRB(8.0 + widget.indent * 16, 6, 8, 6),
+          padding: EdgeInsets.fromLTRB(
+              8.0 + widget.indent * 16, 6, 8, 6),
           color: widget.isActive
-              ? AppColors.blue.withOpacity(0.15)
-              : (_hovered ? AppColors.card : Colors.transparent),
+              ? AppAccent.blue.withOpacity(0.15)
+              : (_hovered ? t.card : Colors.transparent),
           child: Row(
             children: [
               Text(widget.icon, style: const TextStyle(fontSize: 12)),
               const SizedBox(width: 6),
               Expanded(
                 child: Text(widget.label,
-                  style: TextStyle(
-                    color: widget.isActive ? AppColors.blue : AppColors.text2,
-                    fontSize: 11,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
+                    style: TextStyle(
+                      color: widget.isActive ? AppAccent.blue : t.text2,
+                      fontSize: 11,
+                    ),
+                    overflow: TextOverflow.ellipsis),
               ),
             ],
           ),
@@ -729,14 +759,17 @@ class _FsFiles extends StatelessWidget {
   final String path;
   final String? selectedFile;
   final Function(String) onSelect;
-  const _FsFiles({required this.path, this.selectedFile, required this.onSelect});
+  const _FsFiles(
+      {required this.path, this.selectedFile, required this.onSelect});
 
   @override
   Widget build(BuildContext context) {
+    final t = context.appTheme;
     final files = kFsFiles[path] ?? [];
     if (files.isEmpty) {
-      return const Center(
-        child: Text('该目录为空', style: TextStyle(color: AppColors.text3, fontSize: 11)),
+      return Center(
+        child: Text('该目录为空',
+            style: TextStyle(color: t.text3, fontSize: 11)),
       );
     }
     return ListView.builder(
@@ -758,7 +791,8 @@ class _FsFileItem extends StatefulWidget {
   final PlatformFile file;
   final bool isSelected;
   final VoidCallback onTap;
-  const _FsFileItem({required this.file, required this.isSelected, required this.onTap});
+  const _FsFileItem(
+      {required this.file, required this.isSelected, required this.onTap});
 
   @override
   State<_FsFileItem> createState() => _FsFileItemState();
@@ -769,9 +803,10 @@ class _FsFileItemState extends State<_FsFileItem> {
 
   @override
   Widget build(BuildContext context) {
+    final t = context.appTheme;
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
+      onExit:  (_) => setState(() => _hovered = false),
       child: GestureDetector(
         onTap: widget.onTap,
         child: AnimatedContainer(
@@ -781,32 +816,39 @@ class _FsFileItemState extends State<_FsFileItem> {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(4),
             color: widget.isSelected
-                ? AppColors.blue.withOpacity(0.15)
-                : (_hovered ? AppColors.card : Colors.transparent),
+                ? AppAccent.blue.withOpacity(0.15)
+                : (_hovered ? t.card : Colors.transparent),
             border: Border.all(
-              color: widget.isSelected ? AppColors.blue.withOpacity(0.4) : Colors.transparent,
+              color: widget.isSelected
+                  ? AppAccent.blue.withOpacity(0.4)
+                  : Colors.transparent,
             ),
           ),
           child: Row(
             children: [
-              Text(widget.file.icon, style: const TextStyle(fontSize: 16)),
+              Text(widget.file.icon,
+                  style: const TextStyle(fontSize: 16)),
               const SizedBox(width: 10),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(widget.file.name,
-                      style: TextStyle(
-                        color: widget.isSelected ? AppColors.blue : AppColors.text,
-                        fontSize: 11,
-                      )),
-                    Text('${widget.file.date} · ${widget.file.type.toUpperCase()}',
-                      style: const TextStyle(color: AppColors.text3, fontSize: 10)),
+                        style: TextStyle(
+                          color: widget.isSelected
+                              ? AppAccent.blue
+                              : t.text,
+                          fontSize: 11,
+                        )),
+                    Text(
+                        '${widget.file.date} · ${widget.file.type.toUpperCase()}',
+                        style:
+                            TextStyle(color: t.text3, fontSize: 10)),
                   ],
                 ),
               ),
               Text(widget.file.size,
-                style: const TextStyle(color: AppColors.text3, fontSize: 10)),
+                  style: TextStyle(color: t.text3, fontSize: 10)),
             ],
           ),
         ),

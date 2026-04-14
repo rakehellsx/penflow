@@ -9,28 +9,24 @@ class RightPanel extends StatelessWidget {
   final int activeTab;
   final Function(int) onTabChange;
 
-  const RightPanel({super.key, required this.activeTab, required this.onTabChange});
+  const RightPanel(
+      {super.key, required this.activeTab, required this.onTabChange});
 
   @override
   Widget build(BuildContext context) {
+    final t = context.appTheme;
     return Container(
-      decoration: const BoxDecoration(
-        color: AppColors.panel,
-        border: Border(left: BorderSide(color: AppColors.border)),
+      decoration: BoxDecoration(
+        color: t.panel,
+        border: Border(left: BorderSide(color: t.border)),
       ),
       child: Column(
         children: [
-          // Tab bar
           _TabBar(activeTab: activeTab, onTabChange: onTabChange),
-          // Content
           Expanded(
             child: IndexedStack(
               index: activeTab,
-              children: const [
-                _DocsTab(),
-                _LogsTab(),
-                _ReportTab(),
-              ],
+              children: const [_DocsTab(), _LogsTab(), _ReportTab()],
             ),
           ),
         ],
@@ -39,17 +35,19 @@ class RightPanel extends StatelessWidget {
   }
 }
 
+// ── Tab Bar ───────────────────────────────────
+
 class _TabBar extends StatelessWidget {
   final int activeTab;
   final Function(int) onTabChange;
-
   const _TabBar({required this.activeTab, required this.onTabChange});
 
   @override
   Widget build(BuildContext context) {
+    final t = context.appTheme;
     return Container(
-      decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: AppColors.border)),
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: t.border)),
       ),
       child: Row(
         children: [
@@ -67,8 +65,11 @@ class _Tab extends StatefulWidget {
   final int index;
   final int activeTab;
   final Function(int) onTap;
-
-  const _Tab({required this.label, required this.index, required this.activeTab, required this.onTap});
+  const _Tab(
+      {required this.label,
+      required this.index,
+      required this.activeTab,
+      required this.onTap});
 
   @override
   State<_Tab> createState() => _TabState();
@@ -79,11 +80,12 @@ class _TabState extends State<_Tab> {
 
   @override
   Widget build(BuildContext context) {
+    final t = context.appTheme;
     final isActive = widget.index == widget.activeTab;
     return Expanded(
       child: MouseRegion(
         onEnter: (_) => setState(() => _hovered = true),
-        onExit: (_) => setState(() => _hovered = false),
+        onExit:  (_) => setState(() => _hovered = false),
         child: GestureDetector(
           onTap: () => widget.onTap(widget.index),
           child: Container(
@@ -91,21 +93,22 @@ class _TabState extends State<_Tab> {
             decoration: BoxDecoration(
               border: Border(
                 bottom: BorderSide(
-                  color: isActive ? AppColors.blue : Colors.transparent,
+                  color: isActive ? AppAccent.blue : Colors.transparent,
                   width: 2,
                 ),
               ),
               color: _hovered && !isActive
-                  ? AppColors.card.withOpacity(0.5)
+                  ? t.card.withOpacity(0.5)
                   : Colors.transparent,
             ),
             child: Text(
               widget.label,
               textAlign: TextAlign.center,
               style: TextStyle(
-                color: isActive ? AppColors.blue : AppColors.text3,
+                color: isActive ? AppAccent.blue : t.text3,
                 fontSize: 10,
-                fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
+                fontWeight:
+                    isActive ? FontWeight.w600 : FontWeight.normal,
               ),
             ),
           ),
@@ -115,23 +118,20 @@ class _TabState extends State<_Tab> {
   }
 }
 
-// ── Docs Tab ──
+// ── Docs Tab ──────────────────────────────────
 
 class _DocsTab extends StatelessWidget {
   const _DocsTab();
 
   @override
   Widget build(BuildContext context) {
+    final t = context.appTheme;
     return Consumer<WorkflowProvider>(
       builder: (context, provider, _) {
         final node = provider.selectedNode;
-        if (node == null) {
-          return const _DocsPlaceholder();
-        }
-
+        if (node == null) return const _DocsPlaceholder();
         final tool = kTools.where((t) => t.id == node.toolId).firstOrNull;
         if (tool == null) return const _DocsPlaceholder();
-
         final cat = kCategories[tool.catId];
 
         return Column(
@@ -139,8 +139,8 @@ class _DocsTab extends StatelessWidget {
             // Tool header
             Container(
               padding: const EdgeInsets.all(12),
-              decoration: const BoxDecoration(
-                border: Border(bottom: BorderSide(color: AppColors.border)),
+              decoration: BoxDecoration(
+                border: Border(bottom: BorderSide(color: t.border)),
               ),
               child: Row(
                 children: [
@@ -151,7 +151,8 @@ class _DocsTab extends StatelessWidget {
                       color: cat?.color.withOpacity(0.2),
                     ),
                     alignment: Alignment.center,
-                    child: Text(tool.icon, style: const TextStyle(fontSize: 18)),
+                    child: Text(tool.icon,
+                        style: const TextStyle(fontSize: 18)),
                   ),
                   const SizedBox(width: 10),
                   Expanded(
@@ -159,29 +160,40 @@ class _DocsTab extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(tool.name,
-                          style: const TextStyle(color: AppColors.text, fontSize: 12, fontWeight: FontWeight.w600)),
+                            style: TextStyle(
+                                color: t.text,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600)),
                         Text(tool.desc,
-                          style: const TextStyle(color: AppColors.text3, fontSize: 10)),
+                            style: TextStyle(
+                                color: t.text3, fontSize: 10)),
                       ],
                     ),
                   ),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 6, vertical: 2),
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(3),
-                    color: _riskColor(tool.risk).withOpacity(0.15),
-                  ),
-                              child: Text(_riskLabel(tool.risk),
-                    style: TextStyle(color: _riskColor(tool.risk), fontSize: 9, fontWeight: FontWeight.w700)),
+                      color: _riskColor(tool.risk).withOpacity(0.15),
+                    ),
+                    child: Text(
+                      _riskLabel(tool.risk),
+                      style: TextStyle(
+                          color: _riskColor(tool.risk),
+                          fontSize: 9,
+                          fontWeight: FontWeight.w700),
+                    ),
                   ),
                 ],
               ),
             ),
             // Meta info
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: const BoxDecoration(
-                border: Border(bottom: BorderSide(color: AppColors.border)),
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                border: Border(bottom: BorderSide(color: t.border)),
               ),
               child: Row(
                 children: [
@@ -189,18 +201,21 @@ class _DocsTab extends StatelessWidget {
                   const SizedBox(width: 6),
                   _MetaChip(label: tool.platform),
                   const Spacer(),
-                  ...tool.tags.take(2).map((t) => Padding(
-                    padding: const EdgeInsets.only(left: 4),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(3),
-                        color: AppColors.card,
-                        border: Border.all(color: AppColors.border),
-                      ),
-                      child: Text(t, style: const TextStyle(color: AppColors.text3, fontSize: 9)),
-                    ),
-                  )),
+                  ...tool.tags.take(2).map((tag) => Padding(
+                        padding: const EdgeInsets.only(left: 4),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 5, vertical: 1),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(3),
+                            color: t.card,
+                            border: Border.all(color: t.border),
+                          ),
+                          child: Text(tag,
+                              style: TextStyle(
+                                  color: t.text3, fontSize: 9)),
+                        ),
+                      )),
                 ],
               ),
             ),
@@ -215,15 +230,18 @@ class _DocsTab extends StatelessWidget {
             ),
             // Node info footer
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: const BoxDecoration(
-                border: Border(top: BorderSide(color: AppColors.border)),
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                border: Border(top: BorderSide(color: t.border)),
               ),
               child: Row(
                 children: [
-                  const Text('当前节点', style: TextStyle(color: AppColors.text3, fontSize: 10)),
+                  Text('当前节点',
+                      style: TextStyle(color: t.text3, fontSize: 10)),
                   const Spacer(),
-                  Text(tool.name, style: const TextStyle(color: AppColors.text2, fontSize: 10)),
+                  Text(tool.name,
+                      style: TextStyle(color: t.text2, fontSize: 10)),
                 ],
               ),
             ),
@@ -239,13 +257,15 @@ class _DocsPlaceholder extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Center(
+    final t = context.appTheme;
+    return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text('📖', style: TextStyle(fontSize: 32)),
-          SizedBox(height: 8),
-          Text('点击节点查看工具文档', style: TextStyle(color: AppColors.text3, fontSize: 12)),
+          const Text('📖', style: TextStyle(fontSize: 32)),
+          const SizedBox(height: 8),
+          Text('点击节点查看工具文档',
+              style: TextStyle(color: t.text3, fontSize: 12)),
         ],
       ),
     );
@@ -258,35 +278,35 @@ class _MetaChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = context.appTheme;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(3),
-        color: AppColors.card,
-        border: Border.all(color: AppColors.border),
+        color: t.card,
+        border: Border.all(color: t.border),
       ),
-      child: Text(label, style: const TextStyle(color: AppColors.text2, fontSize: 9)),
+      child: Text(label,
+          style: TextStyle(color: t.text2, fontSize: 9)),
     );
   }
 }
 
-// Simple markdown-like text renderer
 class _MarkdownText extends StatelessWidget {
   final String text;
   const _MarkdownText({required this.text});
 
   @override
   Widget build(BuildContext context) {
+    final t = context.appTheme;
     final lines = text.split('\n');
     final widgets = <Widget>[];
-
     bool inCode = false;
     final codeLines = <String>[];
 
     for (final line in lines) {
       if (line.startsWith('```')) {
         if (inCode) {
-          // End code block
           widgets.add(_CodeBlock(code: codeLines.join('\n')));
           codeLines.clear();
           inCode = false;
@@ -295,7 +315,6 @@ class _MarkdownText extends StatelessWidget {
         }
         continue;
       }
-
       if (inCode) {
         codeLines.add(line);
         continue;
@@ -305,34 +324,42 @@ class _MarkdownText extends StatelessWidget {
         widgets.add(Padding(
           padding: const EdgeInsets.only(top: 12, bottom: 4),
           child: Text(line.substring(3),
-            style: const TextStyle(color: AppColors.text, fontSize: 13, fontWeight: FontWeight.w700)),
+              style: TextStyle(
+                  color: t.text,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700)),
         ));
       } else if (line.startsWith('### ')) {
         widgets.add(Padding(
           padding: const EdgeInsets.only(top: 8, bottom: 3),
           child: Text(line.substring(4),
-            style: const TextStyle(color: AppColors.blue, fontSize: 11, fontWeight: FontWeight.w600)),
+              style: TextStyle(
+                  color: AppAccent.blue,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600)),
         ));
-      } else if (line.startsWith('- ✓ ') || line.startsWith('- ⚠ ') || line.startsWith('- ⚠')) {
+      } else if (line.startsWith('- ✓ ') ||
+          line.startsWith('- ⚠ ') ||
+          line.startsWith('- ⚠')) {
         final isOk = line.contains('✓');
         widgets.add(Padding(
           padding: const EdgeInsets.only(left: 8, bottom: 2),
           child: Text(line.substring(2),
-            style: TextStyle(
-              color: isOk ? AppColors.green : AppColors.orange,
-              fontSize: 10,
-            )),
+              style: TextStyle(
+                  color: isOk ? AppAccent.green : AppAccent.orange,
+                  fontSize: 10)),
         ));
       } else if (line.startsWith('- ')) {
         widgets.add(Padding(
           padding: const EdgeInsets.only(left: 8, bottom: 2),
           child: Text('• ${line.substring(2)}',
-            style: const TextStyle(color: AppColors.text2, fontSize: 10)),
+              style: TextStyle(color: t.text2, fontSize: 10)),
         ));
       } else if (line.isNotEmpty) {
         widgets.add(Padding(
           padding: const EdgeInsets.only(bottom: 2),
-          child: Text(line, style: const TextStyle(color: AppColors.text2, fontSize: 10)),
+          child: Text(line,
+              style: TextStyle(color: t.text2, fontSize: 10)),
         ));
       } else {
         widgets.add(const SizedBox(height: 4));
@@ -340,9 +367,7 @@ class _MarkdownText extends StatelessWidget {
     }
 
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: widgets,
-    );
+        crossAxisAlignment: CrossAxisAlignment.start, children: widgets);
   }
 }
 
@@ -352,18 +377,19 @@ class _CodeBlock extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = context.appTheme;
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 6),
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(4),
-        color: AppColors.bg,
-        border: Border.all(color: AppColors.border),
+        color: t.bg,
+        border: Border.all(color: t.border),
       ),
       child: SelectableText(
         code,
-        style: const TextStyle(
-          color: AppColors.cyan,
+        style: TextStyle(
+          color: t.isDark ? AppAccent.cyan : const Color(0xFF0550AE),
           fontSize: 10,
           fontFamily: 'Consolas',
           height: 1.6,
@@ -373,37 +399,42 @@ class _CodeBlock extends StatelessWidget {
   }
 }
 
-// ── Logs Tab ──
+// ── Logs Tab ──────────────────────────────────
 
 class _LogsTab extends StatelessWidget {
   const _LogsTab();
 
   @override
   Widget build(BuildContext context) {
+    final t = context.appTheme;
     return Consumer<WorkflowProvider>(
       builder: (context, provider, _) {
         return Column(
           children: [
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: const BoxDecoration(
-                border: Border(bottom: BorderSide(color: AppColors.border)),
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                border: Border(bottom: BorderSide(color: t.border)),
               ),
               child: Row(
                 children: [
-                  const Text('执行日志', style: TextStyle(color: AppColors.text2, fontSize: 11)),
+                  Text('执行日志',
+                      style:
+                          TextStyle(color: t.text2, fontSize: 11)),
                   const Spacer(),
                   _SmallBtn(
-                    label: '清空',
-                    onTap: () => provider.clearLogs(),
-                  ),
+                      label: '清空',
+                      onTap: () => provider.clearLogs()),
                 ],
               ),
             ),
             Expanded(
               child: provider.logs.isEmpty
-                  ? const Center(
-                      child: Text('暂无日志', style: TextStyle(color: AppColors.text3, fontSize: 11)),
+                  ? Center(
+                      child: Text('暂无日志',
+                          style: TextStyle(
+                              color: t.text3, fontSize: 11)),
                     )
                   : Scrollbar(
                       child: ListView.builder(
@@ -412,19 +443,23 @@ class _LogsTab extends StatelessWidget {
                         itemBuilder: (context, index) {
                           final log = provider.logs[index];
                           return Padding(
-                            padding: const EdgeInsets.only(bottom: 3),
+                            padding:
+                                const EdgeInsets.only(bottom: 3),
                             child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                              crossAxisAlignment:
+                                  CrossAxisAlignment.start,
                               children: [
-                                Text(
-                                  _logIcon(log.type),
-                                  style: const TextStyle(fontSize: 10),
-                                ),
+                                Text(_logIcon(log.type),
+                                    style: const TextStyle(
+                                        fontSize: 10)),
                                 const SizedBox(width: 6),
                                 Expanded(
                                   child: Text(
                                     log.message,
-                                    style: TextStyle(color: log.color, fontSize: 10, height: 1.4),
+                                    style: TextStyle(
+                                        color: log.color,
+                                        fontSize: 10,
+                                        height: 1.4),
                                   ),
                                 ),
                               ],
@@ -444,8 +479,8 @@ class _LogsTab extends StatelessWidget {
     switch (type) {
       case 'success': return '✓';
       case 'warning': return '⚠';
-      case 'error': return '✗';
-      default: return '·';
+      case 'error':   return '✗';
+      default:        return '·';
     }
   }
 }
@@ -464,26 +499,31 @@ class _SmallBtnState extends State<_SmallBtn> {
 
   @override
   Widget build(BuildContext context) {
+    final t = context.appTheme;
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
+      onExit:  (_) => setState(() => _hovered = false),
       child: GestureDetector(
         onTap: widget.onTap,
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+          padding:
+              const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(3),
-            border: Border.all(color: _hovered ? AppColors.red : AppColors.border),
+            border: Border.all(
+                color: _hovered ? AppAccent.red : t.border),
           ),
           child: Text(widget.label,
-            style: TextStyle(color: _hovered ? AppColors.red : AppColors.text3, fontSize: 10)),
+              style: TextStyle(
+                  color: _hovered ? AppAccent.red : t.text3,
+                  fontSize: 10)),
         ),
       ),
     );
   }
 }
 
-// ── Report Tab ──
+// ── Report Tab ────────────────────────────────
 
 class _ReportTab extends StatefulWidget {
   const _ReportTab();
@@ -493,7 +533,8 @@ class _ReportTab extends StatefulWidget {
 }
 
 class _ReportTabState extends State<_ReportTab> {
-  final _domainController = TextEditingController(text: 'corp.local');
+  final _domainController =
+      TextEditingController(text: 'corp.local');
 
   @override
   void dispose() {
@@ -503,6 +544,7 @@ class _ReportTabState extends State<_ReportTab> {
 
   @override
   Widget build(BuildContext context) {
+    final t = context.appTheme;
     return Consumer<WorkflowProvider>(
       builder: (context, provider, _) {
         final nodeCount = provider.nodes.length;
@@ -518,32 +560,42 @@ class _ReportTabState extends State<_ReportTab> {
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(6),
-                  color: AppColors.card,
-                  border: Border.all(color: AppColors.border),
+                  color: t.card,
+                  border: Border.all(color: t.border),
                 ),
                 child: Row(
                   children: [
-                    const Text('📊', style: TextStyle(fontSize: 20)),
+                    const Text('📊',
+                        style: TextStyle(fontSize: 20)),
                     const SizedBox(width: 10),
                     Expanded(
                       child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                        crossAxisAlignment:
+                            CrossAxisAlignment.start,
                         children: [
-                          const Text('报告生成',
-                            style: TextStyle(color: AppColors.text, fontSize: 12, fontWeight: FontWeight.w600)),
+                          Text('报告生成',
+                              style: TextStyle(
+                                  color: t.text,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600)),
                           Text('渗透测试报告 · v1.0 · 通用',
-                            style: const TextStyle(color: AppColors.text3, fontSize: 10)),
+                              style: TextStyle(
+                                  color: t.text3, fontSize: 10)),
                         ],
                       ),
                     ),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 2),
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(3),
-                        color: AppColors.riskNone.withOpacity(0.15),
+                        color: AppAccent.riskNone.withOpacity(0.15),
                       ),
-                      child: const Text('无风险',
-                        style: TextStyle(color: AppColors.riskNone, fontSize: 9, fontWeight: FontWeight.w700)),
+                      child: Text('无风险',
+                          style: TextStyle(
+                              color: AppAccent.riskNone,
+                              fontSize: 9,
+                              fontWeight: FontWeight.w700)),
                     ),
                   ],
                 ),
@@ -553,20 +605,27 @@ class _ReportTabState extends State<_ReportTab> {
               // Stats
               Row(
                 children: [
-                  _StatCard(label: '节点数', value: '$nodeCount', color: AppColors.blue),
+                  _StatCard(
+                      label: '节点数',
+                      value: '$nodeCount',
+                      color: AppAccent.blue),
                   const SizedBox(width: 8),
-                  _StatCard(label: '连线数', value: '$connCount', color: AppColors.green),
+                  _StatCard(
+                      label: '连线数',
+                      value: '$connCount',
+                      color: AppAccent.green),
                 ],
               ),
               const SizedBox(height: 12),
 
               // Target domain
-              const Text('目标域', style: TextStyle(color: AppColors.text3, fontSize: 10)),
+              Text('目标域',
+                  style: TextStyle(color: t.text3, fontSize: 10)),
               const SizedBox(height: 4),
               TextField(
                 controller: _domainController,
                 onChanged: (v) => provider.setTargetDomain(v),
-                style: const TextStyle(color: AppColors.text, fontSize: 11),
+                style: TextStyle(color: t.text, fontSize: 11),
                 decoration: const InputDecoration(
                   hintText: 'corp.local',
                   isDense: true,
@@ -577,29 +636,40 @@ class _ReportTabState extends State<_ReportTab> {
               // Report sections
               const _SectionTitle(title: '报告生成'),
               const _CheckItem(text: '收集信息', done: false),
-              const _CheckItem(text: '目标范围与授权文件', done: false, indent: 1),
-              const _CheckItem(text: '发现的漏洞列表', done: false, indent: 1),
-              const _CheckItem(text: '利用过程截图', done: false, indent: 1),
-              const _CheckItem(text: '获取的权限证明', done: false, indent: 1),
-              const _CheckItem(text: '修复建议', done: false, indent: 1),
+              const _CheckItem(
+                  text: '目标范围与授权文件', done: false, indent: 1),
+              const _CheckItem(
+                  text: '发现的漏洞列表', done: false, indent: 1),
+              const _CheckItem(
+                  text: '利用过程截图', done: false, indent: 1),
+              const _CheckItem(
+                  text: '获取的权限证明', done: false, indent: 1),
+              const _CheckItem(
+                  text: '修复建议', done: false, indent: 1),
               const SizedBox(height: 8),
 
               const _SectionTitle(title: '报告结构'),
-              const _CheckItem(text: '执行摘要 (管理层)', done: false),
-              const _CheckItem(text: '技术细节 (安全团队)', done: false),
-              const _CheckItem(text: '漏洞评级 (CVSS)', done: false),
-              const _CheckItem(text: '修复建议与优先级', done: true),
+              const _CheckItem(
+                  text: '执行摘要 (管理层)', done: false),
+              const _CheckItem(
+                  text: '技术细节 (安全团队)', done: false),
+              const _CheckItem(
+                  text: '漏洞评级 (CVSS)', done: false),
+              const _CheckItem(
+                  text: '修复建议与优先级', done: true),
               const SizedBox(height: 12),
 
               // Generate button
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: () => _generateReport(context, provider),
+                  onPressed: () =>
+                      _generateReport(context, provider),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.blue,
+                    backgroundColor: AppAccent.blue,
                     foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    padding:
+                        const EdgeInsets.symmetric(vertical: 10),
                     textStyle: const TextStyle(fontSize: 11),
                   ),
                   child: const Text('生成渗透测试报告'),
@@ -612,18 +682,40 @@ class _ReportTabState extends State<_ReportTab> {
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(4),
-                  color: AppColors.bg,
-                  border: Border.all(color: AppColors.border),
+                  color: t.bg,
+                  border: Border.all(color: t.border),
                 ),
                 child: Column(
                   children: [
-                    _InfoRow(label: '当前节点', value: provider.selectedNode != null
-        ? (kTools.where((t) => t.id == provider.selectedNode!.toolId).firstOrNull?.name ?? '—')
-        : '—'),
-                    _InfoRow(label: '阶段', value: provider.selectedNode != null
-        ? (kCategories[kTools.where((t) => t.id == provider.selectedNode!.toolId).firstOrNull?.catId ?? '']?.label ?? '—')
-                        : '—'),
-                    _InfoRow(label: '目标域', value: provider.targetDomain),
+                    _InfoRow(
+                        label: '当前节点',
+                        value: provider.selectedNode != null
+                            ? (kTools
+                                    .where((t) =>
+                                        t.id ==
+                                        provider
+                                            .selectedNode!.toolId)
+                                    .firstOrNull
+                                    ?.name ??
+                                '—')
+                            : '—'),
+                    _InfoRow(
+                        label: '阶段',
+                        value: provider.selectedNode != null
+                            ? (kCategories[kTools
+                                        .where((t) =>
+                                            t.id ==
+                                            provider.selectedNode!
+                                                .toolId)
+                                        .firstOrNull
+                                        ?.catId ??
+                                    '']
+                                    ?.label ??
+                                '—')
+                            : '—'),
+                    _InfoRow(
+                        label: '目标域',
+                        value: provider.targetDomain),
                   ],
                 ),
               ),
@@ -634,13 +726,16 @@ class _ReportTabState extends State<_ReportTab> {
     );
   }
 
-  void _generateReport(BuildContext context, WorkflowProvider provider) {
+  void _generateReport(
+      BuildContext context, WorkflowProvider provider) {
+    final t = context.appTheme;
     final report = _buildReportContent(provider);
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.panel,
-        title: const Text('渗透测试报告', style: TextStyle(color: AppColors.text, fontSize: 14)),
+        backgroundColor: t.panel,
+        title: Text('渗透测试报告',
+            style: TextStyle(color: t.text, fontSize: 14)),
         content: SizedBox(
           width: 600,
           height: 500,
@@ -648,7 +743,11 @@ class _ReportTabState extends State<_ReportTab> {
             child: SingleChildScrollView(
               child: SelectableText(
                 report,
-                style: const TextStyle(color: AppColors.text2, fontSize: 11, fontFamily: 'Consolas', height: 1.6),
+                style: TextStyle(
+                    color: t.text2,
+                    fontSize: 11,
+                    fontFamily: 'Consolas',
+                    height: 1.6),
               ),
             ),
           ),
@@ -656,7 +755,8 @@ class _ReportTabState extends State<_ReportTab> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('关闭', style: TextStyle(color: AppColors.blue)),
+            child: const Text('关闭',
+                style: TextStyle(color: AppAccent.blue)),
           ),
         ],
       ),
@@ -668,24 +768,33 @@ class _ReportTabState extends State<_ReportTab> {
     sb.writeln('# 渗透测试报告');
     sb.writeln('');
     sb.writeln('**目标域**: ${provider.targetDomain}');
-    sb.writeln('**生成时间**: ${DateTime.now().toString().substring(0, 19)}');
+    sb.writeln(
+        '**生成时间**: ${DateTime.now().toString().substring(0, 19)}');
     sb.writeln('**工作流节点数**: ${provider.nodes.length}');
     sb.writeln('');
     sb.writeln('## 1. 执行摘要');
     sb.writeln('');
-    sb.writeln('本次渗透测试针对目标域 ${provider.targetDomain} 进行，');
-    sb.writeln('共使用 ${provider.nodes.length} 个工具节点，建立 ${provider.connections.length} 条攻击路径。');
+    sb.writeln(
+        '本次渗透测试针对目标域 ${provider.targetDomain} 进行，');
+    sb.writeln(
+        '共使用 ${provider.nodes.length} 个工具节点，建立 ${provider.connections.length} 条攻击路径。');
     sb.writeln('');
     sb.writeln('## 2. 工具使用情况');
     sb.writeln('');
     for (final node in provider.nodes) {
-      final tool = kTools.where((t) => t.id == node.toolId).firstOrNull;
+      final tool =
+          kTools.where((t) => t.id == node.toolId).firstOrNull;
       if (tool != null) {
         final cat = kCategories[tool.catId];
-        sb.writeln('- **${tool.name}** [${cat?.label ?? ''}] - 风险等级: ${_riskLabelStr(tool.risk)}');
+        sb.writeln(
+            '- **${tool.name}** [${cat?.label ?? ''}] - 风险等级: ${_riskLabel(tool.risk)}');
         if (node.vmId != null) {
-          final vm = kVirtualMachines.where((v) => v.id == node.vmId).firstOrNull;
-          if (vm != null) sb.writeln('  - 目标主机: ${vm.name} (${vm.ip})');
+          final vm = kVirtualMachines
+              .where((v) => v.id == node.vmId)
+              .firstOrNull;
+          if (vm != null) {
+            sb.writeln('  - 目标主机: ${vm.name} (${vm.ip})');
+          }
         }
         if (node.payload != null) {
           sb.writeln('  - 载荷文件: ${node.payload}');
@@ -696,10 +805,22 @@ class _ReportTabState extends State<_ReportTab> {
     sb.writeln('## 3. 攻击路径');
     sb.writeln('');
     for (final conn in provider.connections) {
-      final fromNode = provider.nodes.where((n) => n.id == conn.fromNodeId).firstOrNull;
-      final toNode = provider.nodes.where((n) => n.id == conn.toNodeId).firstOrNull;
-      final fromTool = fromNode != null ? kTools.where((t) => t.id == fromNode.toolId).firstOrNull : null;
-      final toTool = toNode != null ? kTools.where((t) => t.id == toNode.toolId).firstOrNull : null;
+      final fromNode = provider.nodes
+          .where((n) => n.id == conn.fromNodeId)
+          .firstOrNull;
+      final toNode = provider.nodes
+          .where((n) => n.id == conn.toNodeId)
+          .firstOrNull;
+      final fromTool = fromNode != null
+          ? kTools
+              .where((t) => t.id == fromNode.toolId)
+              .firstOrNull
+          : null;
+      final toTool = toNode != null
+          ? kTools
+              .where((t) => t.id == toNode.toolId)
+              .firstOrNull
+          : null;
       if (fromTool != null && toTool != null) {
         sb.writeln('- ${fromTool.name} → ${toTool.name}');
       }
@@ -716,15 +837,18 @@ class _ReportTabState extends State<_ReportTab> {
   }
 }
 
+// ── Shared helper widgets ─────────────────────
+
 class _StatCard extends StatelessWidget {
   final String label;
   final String value;
   final Color color;
-
-  const _StatCard({required this.label, required this.value, required this.color});
+  const _StatCard(
+      {required this.label, required this.value, required this.color});
 
   @override
   Widget build(BuildContext context) {
+    final t = context.appTheme;
     return Expanded(
       child: Container(
         padding: const EdgeInsets.all(10),
@@ -735,8 +859,13 @@ class _StatCard extends StatelessWidget {
         ),
         child: Column(
           children: [
-            Text(value, style: TextStyle(color: color, fontSize: 20, fontWeight: FontWeight.w700)),
-            Text(label, style: const TextStyle(color: AppColors.text3, fontSize: 10)),
+            Text(value,
+                style: TextStyle(
+                    color: color,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w700)),
+            Text(label,
+                style: TextStyle(color: t.text3, fontSize: 10)),
           ],
         ),
       ),
@@ -750,10 +879,14 @@ class _SectionTitle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = context.appTheme;
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
       child: Text(title,
-        style: const TextStyle(color: AppColors.text2, fontSize: 11, fontWeight: FontWeight.w600)),
+          style: TextStyle(
+              color: t.text2,
+              fontSize: 11,
+              fontWeight: FontWeight.w600)),
     );
   }
 }
@@ -762,20 +895,25 @@ class _CheckItem extends StatelessWidget {
   final String text;
   final bool done;
   final int indent;
-
-  const _CheckItem({required this.text, required this.done, this.indent = 0});
+  const _CheckItem(
+      {required this.text, required this.done, this.indent = 0});
 
   @override
   Widget build(BuildContext context) {
+    final t = context.appTheme;
     return Padding(
       padding: EdgeInsets.fromLTRB(indent * 12.0, 0, 0, 3),
       child: Row(
         children: [
           Text(done ? '✓' : '·',
-            style: TextStyle(color: done ? AppColors.green : AppColors.text3, fontSize: 10)),
+              style: TextStyle(
+                  color: done ? AppAccent.green : t.text3,
+                  fontSize: 10)),
           const SizedBox(width: 6),
           Text(text,
-            style: TextStyle(color: done ? AppColors.green : AppColors.text2, fontSize: 10)),
+              style: TextStyle(
+                  color: done ? AppAccent.green : t.text2,
+                  fontSize: 10)),
         ],
       ),
     );
@@ -785,20 +923,21 @@ class _CheckItem extends StatelessWidget {
 class _InfoRow extends StatelessWidget {
   final String label;
   final String value;
-
   const _InfoRow({required this.label, required this.value});
 
   @override
   Widget build(BuildContext context) {
+    final t = context.appTheme;
     return Padding(
       padding: const EdgeInsets.only(bottom: 4),
       child: Row(
         children: [
-          Text('$label: ', style: const TextStyle(color: AppColors.text3, fontSize: 10)),
+          Text('$label: ',
+              style: TextStyle(color: t.text3, fontSize: 10)),
           Expanded(
             child: Text(value,
-              style: const TextStyle(color: AppColors.text2, fontSize: 10),
-              overflow: TextOverflow.ellipsis),
+                style: TextStyle(color: t.text2, fontSize: 10),
+                overflow: TextOverflow.ellipsis),
           ),
         ],
       ),
@@ -806,26 +945,24 @@ class _InfoRow extends StatelessWidget {
   }
 }
 
-// ── Risk Level Helpers ──
+// ── Risk Level Helpers ────────────────────────
 
 Color _riskColor(RiskLevel risk) {
   switch (risk) {
-    case RiskLevel.critical: return AppColors.riskCritical;
-    case RiskLevel.high: return AppColors.riskHigh;
-    case RiskLevel.medium: return AppColors.riskMedium;
-    case RiskLevel.low: return AppColors.riskLow;
-    case RiskLevel.none: return AppColors.riskNone;
+    case RiskLevel.critical: return AppAccent.riskCritical;
+    case RiskLevel.high:     return AppAccent.riskHigh;
+    case RiskLevel.medium:   return AppAccent.riskMedium;
+    case RiskLevel.low:      return AppAccent.riskLow;
+    case RiskLevel.none:     return AppAccent.riskNone;
   }
 }
 
 String _riskLabel(RiskLevel risk) {
   switch (risk) {
     case RiskLevel.critical: return '极危';
-    case RiskLevel.high: return '高危';
-    case RiskLevel.medium: return '中危';
-    case RiskLevel.low: return '低危';
-    case RiskLevel.none: return '无风险';
+    case RiskLevel.high:     return '高危';
+    case RiskLevel.medium:   return '中危';
+    case RiskLevel.low:      return '低危';
+    case RiskLevel.none:     return '无风险';
   }
 }
-
-String _riskLabelStr(RiskLevel risk) => _riskLabel(risk);
