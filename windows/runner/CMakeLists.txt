@@ -19,6 +19,13 @@ add_executable(${BINARY_NAME} WIN32
 # Apply the standard set of build settings. This can be removed for applications
 # that need different build settings.
 apply_standard_settings(${BINARY_NAME})
+# Fix windres resource path for cross-compilation
+# Note: FLUTTER_VERSION contains quotes which windres cannot handle, so we
+# exclude it from RC compilation and only pass numeric version macros.
+set_source_files_properties(Runner.rc PROPERTIES
+  COMPILE_FLAGS "--include-dir=${CMAKE_CURRENT_SOURCE_DIR}"
+  COMPILE_DEFINITIONS "FLUTTER_VERSION_MAJOR=${FLUTTER_VERSION_MAJOR};FLUTTER_VERSION_MINOR=${FLUTTER_VERSION_MINOR};FLUTTER_VERSION_PATCH=${FLUTTER_VERSION_PATCH};FLUTTER_VERSION_BUILD=${FLUTTER_VERSION_BUILD};NOMINMAX;UNICODE;_UNICODE;_WIN32_WINNT=0x0A00;WINVER=0x0A00"
+)
 
 # Add preprocessor definitions for the build version.
 target_compile_definitions(${BINARY_NAME} PRIVATE "FLUTTER_VERSION=\"${FLUTTER_VERSION}\"")
@@ -33,7 +40,7 @@ target_compile_definitions(${BINARY_NAME} PRIVATE "NOMINMAX")
 # Add dependency libraries and include directories. Add any application-specific
 # dependencies here.
 target_link_libraries(${BINARY_NAME} PRIVATE flutter flutter_wrapper_app)
-target_link_libraries(${BINARY_NAME} PRIVATE "dwmapi.lib")
+target_link_libraries(${BINARY_NAME} PRIVATE dwmapi)
 target_include_directories(${BINARY_NAME} PRIVATE "${CMAKE_SOURCE_DIR}")
 
 # Run the Flutter tool portions of the build. This must not be removed.
