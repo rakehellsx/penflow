@@ -142,14 +142,29 @@ class VmBackendFactory {
 // ─────────────────────────────────────────────────────────────────────────────
 
 class VmwareWorkstationBackend extends VmBackend {
-  static const String _baseUrl = 'http://127.0.0.1:8697/api';
-
-  // 从环境变量或配置读取凭据，默认空（需用户配置）
+  // 动态配置：地址、端口、凭据（通过 applyConfig 更新）
+  String _host     = '127.0.0.1';
+  int    _port     = 8697;
   String _username = '';
   String _password = '';
 
+  String get _baseUrl => 'http://$_host:$_port/api';
+
   @override
   String get backendName => 'VMware Workstation (vmrest)';
+
+  /// 一次性应用完整配置（地址 + 凭据）
+  void applyConfig({
+    required String host,
+    required int    port,
+    required String username,
+    required String password,
+  }) {
+    _host     = host.isEmpty ? '127.0.0.1' : host;
+    _port     = port <= 0   ? 8697        : port;
+    _username = username;
+    _password = password;
+  }
 
   void setCredentials(String username, String password) {
     _username = username;

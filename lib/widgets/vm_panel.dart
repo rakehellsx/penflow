@@ -7,6 +7,7 @@ import '../models/tool_model.dart';
 import '../services/vm_backend.dart';
 import '../utils/app_theme.dart';
 import 'create_vm_dialog.dart';
+import 'vmrest_config_dialog.dart';
 
 class VmPanel extends StatefulWidget {
   final String nodeId;
@@ -64,6 +65,16 @@ class _VmPanelState extends State<VmPanel>
     );
   }
 
+  Future<void> _openVmrestConfig(BuildContext ctx) async {
+    await showDialog<bool>(
+      context: ctx,
+      builder: (_) => ChangeNotifierProvider.value(
+        value: ctx.read<VmManagerProvider>(),
+        child: const VmrestConfigDialog(),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final t = context.appTheme;
@@ -104,7 +115,7 @@ class _VmPanelState extends State<VmPanel>
         children: [
           const Text('🖥', style: TextStyle(fontSize: 16)),
           const SizedBox(width: 8),
-          Text('选择目标虚拟机',
+          Text(widget.nodeId.isEmpty ? '虚拟机管理' : '选择目标虚拟机',
               style: TextStyle(
                   color: t.text,
                   fontSize: 13,
@@ -126,11 +137,15 @@ class _VmPanelState extends State<VmPanel>
           ),
           const Spacer(),
 
-          // ── 新建虚拟机按钮 ──────────────────────────────
+           // ── 新建虚拟机按鈕 ──────────────────────────────
           _NewVmButton(onTap: _openCreateVmDialog),
+          const SizedBox(width: 6),
+
+          // ── vmrest 配置按鈕 ────────────────────────────
+          _VmrestConfigButton(onTap: () => _openVmrestConfig(context)),
           const SizedBox(width: 10),
 
-          // ── 关闭按钮 ────────────────────────────────────
+          // ── 关闭按鈕 ──────────────────────────────
           MouseRegion(
             cursor: SystemMouseCursors.click,
             child: GestureDetector(
@@ -251,7 +266,7 @@ class _VmPanelState extends State<VmPanel>
           return _StaticVmCard(
             vm: vm,
             nodeId: widget.nodeId,
-            onSelect: () {
+            onSelect: widget.nodeId.isEmpty ? null : () {
               context.read<WorkflowProvider>().setNodeVm(
                 widget.nodeId, vm.id,
                 vmName: vm.name,
@@ -309,15 +324,32 @@ class _VmPanelState extends State<VmPanel>
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 12),
-            ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppAccent.blue,
-                foregroundColor: Colors.white,
-                elevation: 0,
-              ),
-              onPressed: () => manager.refresh(),
-              icon: const Icon(Icons.refresh, size: 14),
-              label: const Text('重新检测', style: TextStyle(fontSize: 11)),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppAccent.blue,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                  ),
+                  onPressed: () => manager.refresh(),
+                  icon: const Icon(Icons.refresh, size: 14),
+                  label: const Text('重新检测', style: TextStyle(fontSize: 11)),
+                ),
+                const SizedBox(width: 8),
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.transparent,
+                    foregroundColor: t.text2,
+                    elevation: 0,
+                    side: BorderSide(color: t.border),
+                  ),
+                  onPressed: () => _openVmrestConfig(context),
+                  icon: const Icon(Icons.settings_ethernet, size: 14),
+                  label: const Text('配置连接', style: TextStyle(fontSize: 11)),
+                ),
+              ],
             ),
           ],
         ),
@@ -368,7 +400,7 @@ class _VmPanelState extends State<VmPanel>
           return _RealVmCard(
             vm: vm,
             nodeId: widget.nodeId,
-            onSelect: () {
+            onSelect: widget.nodeId.isEmpty ? null : () {
               context.read<WorkflowProvider>().setNodeVm(
                 widget.nodeId, vm.id,
                 vmName: vm.name,
@@ -389,6 +421,54 @@ class _VmPanelState extends State<VmPanel>
 // ─────────────────────────────────────────────────────────────────────────────
 // 新建 VM 按钮
 // ─────────────────────────────────────────────────────────────────────────────
+
+class _VmrestConfigButton extends StatefulWidget {
+  final VoidCallback onTap;
+  const _VmrestConfigButton({required this.onTap});
+
+  @override
+  State<_VmrestConfigButton> createState() => _VmrestConfigButtonState();
+}
+
+class _VmrestConfigButtonState extends State<_VmrestConfigButton> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = context.appTheme;
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(4),
+            color: _hovered ? t.card : Colors.transparent,
+            border: Border.all(
+              color: _hovered ? t.borderHi : t.border,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.settings_ethernet, color: t.text2, size: 13),
+              const SizedBox(width: 5),
+              Text('API 配置',
+                  style: TextStyle(
+                    color: t.text2,
+                    fontSize: 11,
+                  )),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
 
 class _NewVmButton extends StatefulWidget {
   final VoidCallback onTap;
@@ -450,7 +530,7 @@ class _NewVmButtonState extends State<_NewVmButton> {
 class _RealVmCard extends StatefulWidget {
   final VmInfo vm;
   final String nodeId;
-  final VoidCallback onSelect;
+  final VoidCallback? onSelect;
 
   const _RealVmCard(
       {required this.vm, required this.nodeId, required this.onSelect});
@@ -703,6 +783,34 @@ class _RealVmCardState extends State<_RealVmCard> {
                   ],
                 ],
               ),
+              // ── 进入虚拟机按鈕（节点绑定模式才显示）─────────────────
+              if (widget.onSelect != null) ...[
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: isSelected
+                          ? AppAccent.green.withOpacity(0.15)
+                          : AppAccent.blue.withOpacity(0.12),
+                      foregroundColor: isSelected
+                          ? AppAccent.green
+                          : AppAccent.blue,
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      textStyle: const TextStyle(fontSize: 10),
+                    ),
+                    onPressed: widget.onSelect,
+                    icon: Icon(
+                      isSelected
+                          ? Icons.check_circle_outline
+                          : Icons.computer,
+                      size: 12,
+                    ),
+                    label: Text(isSelected ? '已选择' : '进入虚拟机'),
+                  ),
+                ),
+              ],
             ],
           ),
         ),
@@ -821,7 +929,7 @@ class _MenuItem extends StatelessWidget {
 class _StaticVmCard extends StatefulWidget {
   final VirtualMachine vm;
   final String nodeId;
-  final VoidCallback onSelect;
+  final VoidCallback? onSelect;
 
   const _StaticVmCard(
       {required this.vm, required this.nodeId, required this.onSelect});

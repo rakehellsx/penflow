@@ -15,6 +15,7 @@ class TopBar extends StatelessWidget {
   final bool sidebarCollapsed;
   final VoidCallback onChangePassword;
   final VoidCallback onLogout;
+  final VoidCallback onVmManager;
 
   const TopBar({
     super.key,
@@ -28,6 +29,7 @@ class TopBar extends StatelessWidget {
     required this.sidebarCollapsed,
     required this.onChangePassword,
     required this.onLogout,
+    required this.onVmManager,
   });
 
   @override
@@ -89,6 +91,12 @@ class TopBar extends StatelessWidget {
               _TbButton(label: '⚡ 自动布局', onTap: onAutoLayout),
               const SizedBox(width: 4),
               _TbButton(label: '🔭 适应视图', onTap: onFitView),
+              const SizedBox(width: 4),
+              _TbButton(
+                label: '🖥 虚拟机管理',
+                color: AppAccent.blue,
+                onTap: onVmManager,
+              ),
               const SizedBox(width: 4),
               _TbButton(
                   label: '🗑 清空',

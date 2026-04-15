@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import '../services/vm_backend.dart';
 import '../services/vmrest_launcher.dart';
+import '../services/vmrest_config.dart';
 
 enum VmManagerStatus { idle, loading, error }
 
@@ -18,6 +19,9 @@ class VmManagerProvider extends ChangeNotifier {
   VmrestStatus     _vmrestStatus  = VmrestStatus.notApplicable;
   String           _vmrestMessage = '';
 
+  // 当前已加载的配置
+  VmrestConfig _config = VmrestConfig.defaults();
+
   List<VmInfo>    get vms           => _vms;
   VmManagerStatus get status        => _status;
   String?         get error         => _error;
@@ -26,6 +30,7 @@ class VmManagerProvider extends ChangeNotifier {
   String          get backendName   => _backend.backendName;
   VmrestStatus    get vmrestStatus  => _vmrestStatus;
   String          get vmrestMessage => _vmrestMessage;
+  VmrestConfig    get config        => _config;
 
   /// 是否正在启动 vmrest（用于 UI 显示进度）
   bool get isLaunchingVmrest =>
@@ -34,19 +39,22 @@ class VmManagerProvider extends ChangeNotifier {
 
   // ── 初始化 ─────────────────────────────────────────────────────────────────
 
-  /// 初始化：Windows 下自动检测并启动 vmrest.exe，然后加载 VM 列表
+  /// 初始化：加载持久化配置 → Windows 下自动检测并启动 vmrest.exe → 加载 VM 列表
   Future<void> initialize() async {
     if (_initialized) return;
     _initialized = true;
     _status = VmManagerStatus.loading;
     notifyListeners();
 
-    // Windows：先确保 vmrest.exe 运行
+    // 1. 从持久化存储加载配置，并应用到 backend
+    await _loadAndApplyConfig();
+
+    // 2. Windows：先确保 vmrest.exe 运行
     if (Platform.isWindows) {
       await _ensureVmrest();
     }
 
-    // 检测后端可用性并加载 VM 列表
+    // 3. 检测后端可用性并加载 VM 列表
     _available = await _backend.isAvailable();
     if (_available) {
       await _loadVms();
@@ -54,6 +62,41 @@ class VmManagerProvider extends ChangeNotifier {
       _status = VmManagerStatus.idle;
     }
     notifyListeners();
+  }
+
+  /// 从 SharedPreferences 加载配置并应用到 backend
+  Future<void> _loadAndApplyConfig() async {
+    _config = await VmrestConfig.load();
+    _applyConfigToBackend(_config);
+  }
+
+  /// 将配置应用到 backend
+  void _applyConfigToBackend(VmrestConfig cfg) {
+    if (_backend is VmwareWorkstationBackend) {
+      (_backend as VmwareWorkstationBackend).applyConfig(
+        host:     cfg.host,
+        port:     cfg.port,
+        username: cfg.username,
+        password: cfg.password,
+      );
+    }
+  }
+
+  // ── 配置更新 ───────────────────────────────────────────────────────────────
+
+  /// 更新并持久化 vmrest 配置，保存后立即应用到 backend 并重新连接
+  Future<void> updateConfig(VmrestConfig newConfig) async {
+    _config = newConfig;
+    await newConfig.save();
+    _applyConfigToBackend(newConfig);
+    // 重置可用状态，触发重新连接
+    _initialized = false;
+    _available   = false;
+    _vms         = [];
+    _error       = null;
+    notifyListeners();
+    // 重新初始化（重新检测 vmrest + 加载 VM 列表）
+    await initialize();
   }
 
   /// 确保 vmrest.exe 正在运行（Windows 专用）
@@ -71,7 +114,6 @@ class VmManagerProvider extends ChangeNotifier {
     _vmrestMessage = result.message;
 
     if (!result.isAvailable) {
-      // vmrest 不可用，记录错误但不阻断启动（VM 面板会显示不可用提示）
       _error = result.message;
     }
     notifyListeners();
@@ -81,7 +123,7 @@ class VmManagerProvider extends ChangeNotifier {
 
   Future<void> _loadVms() async {
     try {
-      _vms   = await _backend.listVms();
+      _vms    = await _backend.listVms();
       _status = VmManagerStatus.idle;
       _error  = null;
     } catch (e) {
@@ -110,35 +152,30 @@ class VmManagerProvider extends ChangeNotifier {
 
   // ── VM 电源操作 ────────────────────────────────────────────────────────────
 
-  /// 开机
   Future<bool> powerOn(String vmId) async {
     final ok = await _backend.powerOn(vmId);
     if (ok) await _updateVmState(vmId, VmPowerState.poweredOn);
     return ok;
   }
 
-  /// 关机
   Future<bool> powerOff(String vmId) async {
     final ok = await _backend.powerOff(vmId);
     if (ok) await _updateVmState(vmId, VmPowerState.poweredOff);
     return ok;
   }
 
-  /// 重启
   Future<bool> reboot(String vmId) async {
     final ok = await _backend.reboot(vmId);
     if (ok) await _updateVmState(vmId, VmPowerState.poweredOn);
     return ok;
   }
 
-  /// 挂起
   Future<bool> suspend(String vmId) async {
     final ok = await _backend.suspend(vmId);
     if (ok) await _updateVmState(vmId, VmPowerState.suspended);
     return ok;
   }
 
-  /// 删除
   Future<bool> delete(String vmId) async {
     final ok = await _backend.delete(vmId);
     if (ok) {
@@ -148,11 +185,9 @@ class VmManagerProvider extends ChangeNotifier {
     return ok;
   }
 
-  /// 新建虚拟机
   Future<VmInfo?> createVm(CreateVmRequest req) async {
     _status = VmManagerStatus.loading;
     notifyListeners();
-
     final vm = await _backend.createVm(req);
     if (vm != null) {
       _vms = [..._vms, vm];
@@ -170,12 +205,11 @@ class VmManagerProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 打开虚拟机控制台
   Future<ConsoleResult> openConsole(String vmId, {String? vmName}) async {
     return _backend.openConsole(vmId, vmName: vmName);
   }
 
-  /// VMware 凭据配置（仅 Windows）
+  /// VMware 凭据配置（仅 Windows，兼容旧调用）
   void configureVmwareCredentials(String username, String password) {
     if (_backend is VmwareWorkstationBackend) {
       (_backend as VmwareWorkstationBackend).setCredentials(username, password);

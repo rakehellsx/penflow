@@ -18,16 +18,27 @@ class MainScreen extends StatefulWidget {
 }
 
 class _MainScreenState extends State<MainScreen> {
-  bool _vmPanelOpen  = false;
+  bool _vmPanelOpen    = false;
   String? _vmPanelNodeId;
-  int  _rightPanelTab = 0;
+  bool _vmManagerOpen  = false;   // 顶部菜单触发的管理模式
+  int  _rightPanelTab  = 0;
   bool _sidebarCollapsed = false;
 
   void _openVMPanel(String nodeId) =>
-      setState(() { _vmPanelOpen = true; _vmPanelNodeId = nodeId; });
+      setState(() { _vmPanelOpen = true; _vmPanelNodeId = nodeId; _vmManagerOpen = false; });
 
   void _closeVMPanel() =>
       setState(() { _vmPanelOpen = false; _vmPanelNodeId = null; });
+
+  void _toggleVmManager() => setState(() {
+    if (_vmManagerOpen) {
+      _vmManagerOpen = false;
+    } else {
+      _vmManagerOpen = true;
+      _vmPanelOpen   = false;   // 关闭节点绑定模式
+      _vmPanelNodeId = null;
+    }
+  });
 
   void _switchRightTab(int tab) => setState(() => _rightPanelTab = tab);
 
@@ -248,6 +259,7 @@ class _MainScreenState extends State<MainScreen> {
             sidebarCollapsed: _sidebarCollapsed,
             onChangePassword: _showChangePassword,
             onLogout:         _logout,
+            onVmManager:      _toggleVmManager,
           ),
           Expanded(
             child: Stack(
@@ -281,7 +293,7 @@ class _MainScreenState extends State<MainScreen> {
                     ),
                   ],
                 ),
-                // ── VM 选择面板 ─────────────────────────────
+                // ── VM 选择面板（节点绑定模式）──────────────────────────
                 if (_vmPanelOpen)
                   Positioned(
                     bottom: 0,
@@ -290,6 +302,17 @@ class _MainScreenState extends State<MainScreen> {
                     child: VmPanel(
                       nodeId:  _vmPanelNodeId!,
                       onClose: _closeVMPanel,
+                    ),
+                  ),
+                // ── VM 管理面板（顶部菜单触发）─────────────────────────
+                if (_vmManagerOpen)
+                  Positioned(
+                    bottom: 0,
+                    left:   sidebarWidth,
+                    right:  300,
+                    child: VmPanel(
+                      nodeId:  '',          // 空字符串表示管理模式
+                      onClose: _toggleVmManager,
                     ),
                   ),
               ],
