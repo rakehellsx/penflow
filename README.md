@@ -104,94 +104,87 @@ vmrest.exe
 
 Flutter 官方不支持从 Linux 直接交叉编译 Windows 二进制，但可通过 **MinGW-w64 工具链** 绕过 Flutter CLI 直接调用 CMake 完成编译。以下步骤在 Ubuntu 22.04 / Debian 12 上验证通过。
 
-#### 第一步：安装 MinGW-w64 交叉编译工具链
+#### 第一步：安装依赖工具
 
 ```bash
 sudo apt update
-sudo apt install -y \
-  mingw-w64 \
-  mingw-w64-tools \
-  gcc-mingw-w64-x86-64 \
-  g++-mingw-w64-x86-64 \
-  binutils-mingw-w64-x86-64 \
-  cmake ninja-build
-
-# 验证安装
-x86_64-w64-mingw32-gcc --version
+sudo apt install -y mingw-w64 cmake ninja-build wine64
 ```
 
-#### 第二步：克隆项目并安装 Flutter 依赖
+#### 第二步：准备 Flutter Windows 引擎和依赖
+
+交叉编译需要 Windows 平台的 `flutter_windows.dll`、`icudtl.dat` 和 `cpp_client_wrapper`，需要从 Flutter 官方预编译包中提取。
 
 ```bash
-git clone -b dev https://github.com/rakehellsx/penflow.git
-cd penflow
-
 export PATH="$PATH:/path/to/flutter/bin"
+cd penflow
 flutter pub get
+
+# 1. 获取当前 Flutter 引擎版本
+ENGINE_HASH=$(cat /path/to/flutter/bin/internal/engine.version)
+
+# 2. 下载并解压 Flutter Windows 引擎
+mkdir -p /path/to/flutter/bin/cache/artifacts/engine/windows-x64
+curl -s -L -o /tmp/flutter_windows_engine.zip "https://storage.googleapis.com/flutter_infra_release/flutter/$ENGINE_HASH/windows-x64/windows-x64-flutter.zip"
+unzip -q /tmp/flutter_windows_engine.zip -d /path/to/flutter/bin/cache/artifacts/engine/windows-x64/
+
+# 3. 准备 gen_snapshot wrapper（tool_backend.sh 需要）
+cat > /path/to/flutter/bin/cache/artifacts/engine/windows-x64/gen_snapshot << 'EOF'
+#!/bin/bash
+wine64 "$(dirname "$0")/gen_snapshot.exe" "$@"
+EOF
+chmod +x /path/to/flutter/bin/cache/artifacts/engine/windows-x64/gen_snapshot
 ```
 
-#### 第三步：编写 CMake MinGW 工具链文件
+#### 第三步：生成 Flutter 资产和插件代码
+
+在 Linux 下使用 `tool_backend.sh` 生成 Windows 的 `flutter_assets`：
 
 ```bash
-cat > /tmp/mingw-toolchain.cmake << 'EOF'
-set(CMAKE_SYSTEM_NAME Windows)
-set(CMAKE_SYSTEM_PROCESSOR x86_64)
-
-set(CMAKE_C_COMPILER   x86_64-w64-mingw32-gcc)
-set(CMAKE_CXX_COMPILER x86_64-w64-mingw32-g++)
-set(CMAKE_RC_COMPILER  x86_64-w64-mingw32-windres)
-
-set(CMAKE_FIND_ROOT_PATH /usr/x86_64-w64-mingw32)
-set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
-set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
-set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
-EOF
+cd penflow/windows/flutter
+bash /path/to/flutter/packages/flutter_tools/bin/tool_backend.sh windows-x64 release
 ```
 
 #### 第四步：执行交叉编译
+
+本项目已内置了适配 MinGW 的工具链文件 `windows/mingw-toolchain.cmake`，并修复了第三方插件（如 `window_manager`）的 MSVC 专属编译选项。
 
 ```bash
 cd penflow/windows
 mkdir -p build_cross && cd build_cross
 
 cmake .. \
-  -DCMAKE_TOOLCHAIN_FILE=/tmp/mingw-toolchain.cmake \
+  -DCMAKE_TOOLCHAIN_FILE=../mingw-toolchain.cmake \
   -DCMAKE_BUILD_TYPE=Release \
   -G "Unix Makefiles"
 
 make -j$(nproc)
 ```
 
-#### 第五步：收集运行时依赖 DLL
+#### 第五步：收集运行时依赖并打包
 
-编译完成后，需将 MinGW 运行时 DLL 和 Flutter 引擎 DLL 一并打包，才能在目标 Windows 机器上运行：
+编译完成后，需将生成的可执行文件、Flutter 引擎 DLL、各插件 DLL 和 Flutter 资产一起打包：
 
 ```bash
-mkdir -p /tmp/penflow_win_release
+mkdir -p /tmp/penflow_win_release/data
 
-# 复制主程序
-cp penflow.exe /tmp/penflow_win_release/
+# 1. 复制主程序
+cp runner/penflow.exe /tmp/penflow_win_release/
 
-# 复制 MinGW 运行时 DLL（必须）
-for dll in libgcc_s_seh-1.dll libstdc++-6.dll libwinpthread-1.dll; do
-  find /usr/lib/gcc/x86_64-w64-mingw32 /usr/x86_64-w64-mingw32 \
-    -name "$dll" 2>/dev/null | head -1 | xargs -I{} cp {} /tmp/penflow_win_release/
-done
+# 2. 复制 Flutter 引擎和依赖 DLL
+cp ../flutter/ephemeral/flutter_windows.dll /tmp/penflow_win_release/
+cp /path/to/flutter/bin/cache/artifacts/engine/windows-x64/icudtl.dat /tmp/penflow_win_release/
 
-# 复制 Flutter Windows 引擎 DLL（从 Flutter SDK 缓存中获取）
-FLUTTER_ENGINE_DIR=$(flutter --version 2>/dev/null | grep -o 'Engine.*' | head -1)
-ENGINE_CACHE="$HOME/.pub-cache/hosted"
-# flutter_windows.dll 由 flutter build windows 生成，位于 build/windows/x64/runner/Release/
-# 交叉编译时需手动从 Flutter 引擎预编译包获取：
-# https://storage.googleapis.com/flutter_infra_release/releases/stable/windows/
-cp flutter_windows.dll /tmp/penflow_win_release/ 2>/dev/null || \
-  echo "请手动从 Flutter Windows 发布包中提取 flutter_windows.dll"
+# 3. 复制所有插件 DLL
+find plugins -name "*.dll" -exec cp {} /tmp/penflow_win_release/ \;
 
-# 复制 sqlite3.dll（sqlite3_flutter_libs 提供）
-find ~/.pub-cache -name "sqlite3.dll" 2>/dev/null | head -1 | \
-  xargs -I{} cp {} /tmp/penflow_win_release/
+# 4. 复制 Flutter 资产
+cp -r ../../build/flutter_assets /tmp/penflow_win_release/data/
 
-# 打包
+# 5. 复制 MinGW 运行时 DLL（可选，静态链接时不需要）
+# 如果遇到缺失 libgcc_s_seh-1.dll、libstdc++-6.dll、libwinpthread-1.dll，需从 /usr/x86_64-w64-mingw32/bin 复制
+
+# 6. 打包
 cd /tmp && zip -r penflow_windows_x64.zip penflow_win_release/
 ```
 
@@ -295,6 +288,9 @@ examples/
 
 | 版本 | 主要更新 |
 |------|----------|
+| v9 | Windows 启动时自动检测并启动 vmrest.exe 服务 |
+| v8 | 支持通过 MinGW 在 Linux 下交叉编译 Windows 版本 |
+| v7 | GitHub Actions 自动化构建与发布流程 |
 | v6 | 左侧面板双Tab（任务管理/工具箱）、任务 SQLite 完整持久化、节点VM绑定持久化 |
 | v5 | 节点"进入虚拟机"按钮对接 VMware/KVM 控制台 |
 | v4 | 新建VM对话框、VM卡片操作菜单（关机/重启/挂起/删除） |
