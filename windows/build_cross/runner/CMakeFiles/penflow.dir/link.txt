@@ -1,0 +1,3 @@
+/usr/local/lib/python3.11/dist-packages/cmake/data/bin/cmake -E rm -f CMakeFiles/penflow.dir/objects.a
+/usr/bin/x86_64-w64-mingw32-ar qc CMakeFiles/penflow.dir/objects.a @CMakeFiles/penflow.dir/objects1.rsp
+/usr/bin/x86_64-w64-mingw32-g++ -O3 -DNDEBUG -mwindows -municode -Wl,--whole-archive CMakeFiles/penflow.dir/objects.a -Wl,--no-whole-archive -o penflow.exe -Wl,--out-implib,libpenflow.dll.a -Wl,--major-image-version,0,--minor-image-version,0 @CMakeFiles/penflow.dir/linkLibs.rsp

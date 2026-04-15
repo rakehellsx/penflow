@@ -1,0 +1,16 @@
+#IncludeRegexLine: ^[ 	]*[#%][ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+
+#IncludeRegexScan: ^.*$
+
+#IncludeRegexComplain: ^$
+
+#IncludeRegexTransform: 
+
+/home/ubuntu/penflow/windows/runner/Runner.rc
+resource.h
+/home/ubuntu/penflow/windows/runner/resource.h
+winres.h
+/home/ubuntu/penflow/windows/runner/winres.h
+
+/home/ubuntu/penflow/windows/runner/resource.h
+

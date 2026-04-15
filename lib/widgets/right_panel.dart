@@ -5,6 +5,8 @@ import '../providers/workflow_provider.dart';
 import '../providers/tool_provider.dart';
 import '../data/tools_data.dart' show kVirtualMachines;
 import '../utils/app_theme.dart';
+import 'file_manager_tab.dart';
+import 'payload_tab.dart';
 
 class RightPanel extends StatelessWidget {
   final int activeTab;
@@ -27,7 +29,7 @@ class RightPanel extends StatelessWidget {
           Expanded(
             child: IndexedStack(
               index: activeTab,
-              children: const [_DocsTab(), _LogsTab(), _ReportTab()],
+              children: const [_DocsTab(), FileManagerTab(), PayloadTab()],
             ),
           ),
         ],
@@ -53,8 +55,8 @@ class _TabBar extends StatelessWidget {
       child: Row(
         children: [
           _Tab(label: '📖 工具文档', index: 0, activeTab: activeTab, onTap: onTabChange),
-          _Tab(label: '📋 执行日志', index: 1, activeTab: activeTab, onTap: onTabChange),
-          _Tab(label: '📊 报告生成', index: 2, activeTab: activeTab, onTap: onTabChange),
+          _Tab(label: '📁 文件管理', index: 1, activeTab: activeTab, onTap: onTabChange),
+          _Tab(label: '📦 载荷列表', index: 2, activeTab: activeTab, onTap: onTabChange),
         ],
       ),
     );

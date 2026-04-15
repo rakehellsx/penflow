@@ -1,0 +1,7 @@
+{
+	"InstallScripts" : 
+	[
+		"/home/ubuntu/penflow/windows/build_cross/_deps/sqlite3-subbuild/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

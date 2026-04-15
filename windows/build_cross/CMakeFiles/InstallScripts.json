@@ -1,0 +1,12 @@
+{
+	"InstallScripts" : 
+	[
+		"/home/ubuntu/penflow/windows/build_cross/cmake_install.cmake",
+		"/home/ubuntu/penflow/windows/build_cross/flutter/cmake_install.cmake",
+		"/home/ubuntu/penflow/windows/build_cross/runner/cmake_install.cmake",
+		"/home/ubuntu/penflow/windows/build_cross/plugins/screen_retriever_windows/cmake_install.cmake",
+		"/home/ubuntu/penflow/windows/build_cross/plugins/sqlite3_flutter_libs/cmake_install.cmake",
+		"/home/ubuntu/penflow/windows/build_cross/plugins/window_manager/cmake_install.cmake"
+	],
+	"Parallel" : false
+}
